@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+<style>
+#startBtn {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  font-size: 18px;
+  z-index: 999;
+}
+</style>
+</head>
+
+<body>
+
+<button id="startBtn">INICIAR VR</button>
+
+<a-scene fog="type: exponential; color: #111; density: 0.02">
+
+  <!-- PLAYER + LINTERNA -->
+  <a-entity id="player" position="0 1.7 0">
+    <a-camera look-controls="touchEnabled: true"></a-camera>
+    <a-light type="spot" intensity="6" angle="45" distance="60" penumbra="0.9"></a-light>
+  </a-entity>
+
+  <!-- SUELO MÁS CLARO -->
+  <a-plane rotation="-90 0 0" width="200" height="200" color="#2a2a2a"></a-plane>
+
+  <!-- CIELO MENOS NEGRO -->
+  <a-sky color="#111"></a-sky>
+
+  <!-- LUZ GLOBAL -->
+  <a-light type="ambient" intensity="0.5"></a-light>
+
+</a-scene>
+
+<script>
+let scene = document.querySelector("a-scene");
+let player = document.querySelector("#player");
+let started = false;
+
+// ACTIVAR SENSORES
+document.getElementById("startBtn").onclick = async () => {
+  document.getElementById("startBtn").style.display = "none";
+
+  if (typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function") {
+    try {
+      await DeviceMotionEvent.requestPermission();
+    } catch (e) {}
+  }
+
+  started = true;
+};
+
+// 🌲 BOSQUE VISIBLE
+for (let i = 0; i < 60; i++) {
+  let x = (Math.random() - 0.5) * 120;
+  let z = (Math.random() - 0.5) * 120;
+
+  let tronco = document.createElement("a-cylinder");
+  tronco.setAttribute("position", `${x} 1 ${z}`);
+  tronco.setAttribute("radius", "0.3");
+  tronco.setAttribute("height", "3");
+  tronco.setAttribute("color", "#5a3a1a"); // más visible
+
+  let hojas = document.createElement("a-cone");
+  hojas.setAttribute("position", `${x} 3 ${z}`);
+  hojas.setAttribute("radius-bottom", "1.5");
+  hojas.setAttribute("height", "3");
+  hojas.setAttribute("color", "#1f5c1f"); // verde visible
+
+  scene.appendChild(tronco);
+  scene.appendChild(hojas);
+}
+
+// 🚶 MOVIMIENTO RÁPIDO
+let lastStep = 0;
+
+window.addEventListener("devicemotion", e => {
+  if (!started) return;
+
+  let acc = e.accelerationIncludingGravity;
+  if (!acc) return;
+
+  let fuerza = Math.abs(acc.x + acc.y + acc.z);
+  let now = Date.now();
+
+  if (fuerza > 14 && now - lastStep > 90) {
+    lastStep = now;
+    moveForward(1.8);
+  }
+});
+
+// SPRINT
+document.body.addEventListener("touchstart", () => {
+  if (started) moveForward(2.5);
+});
+
+function moveForward(speed) {
+  let pos = player.getAttribute("position");
+  let rot = player.getAttribute("rotation").y;
+  let rad = rot * (Math.PI / 180);
+
+  pos.x -= Math.sin(rad) * speed;
+  pos.z -= Math.cos(rad) * speed;
+
+  player.setAttribute("position", pos);
+}
+</script>
+
+</body>
+</html>
