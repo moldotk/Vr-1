@@ -1,29 +1,24 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 <style>
-#startBtn {
-  position: fixed;
-  top: 40%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 20px;
-  font-size: 18px;
-  z-index: 999;
+#startBtn{
+  position:fixed; top:40%; left:50%;
+  transform:translate(-50%,-50%);
+  padding:20px; font-size:18px; z-index:999;
 }
 </style>
 </head>
 
 <body>
 
-<button id="startBtn">INICIAR VR</button>
+<button id="startBtn">INICIAR</button>
 
-<a-scene fog="type: exponential; color: #111; density: 0.02">
+<a-scene fog="type: exponential; color: #bcd3ff; density: 0.01">
 
   <a-assets>
-    <!-- MONSTRUO 3D -->
     <a-asset-item id="monsterModel"
       src="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@main/2.0/Monster/glTF-Binary/Monster.glb">
     </a-asset-item>
@@ -31,28 +26,36 @@
 
   <!-- PLAYER -->
   <a-entity id="player" position="0 1.7 0">
-
-    <a-camera id="cam" look-controls="touchEnabled: true">
-      <a-light type="spot" intensity="6" angle="45" distance="60"></a-light>
+    <a-camera id="cam" look-controls="touchEnabled:true">
+      <!-- linterna suave (de día casi no se nota) -->
+      <a-light type="spot" intensity="2" angle="40" distance="40"></a-light>
     </a-camera>
-
   </a-entity>
 
-  <!-- MUNDO -->
-  <a-plane rotation="-90 0 0" width="200" height="200" color="#2a2a2a"></a-plane>
-  <a-sky color="#111"></a-sky>
-  <a-light type="ambient" intensity="0.5"></a-light>
+  <!-- SUELO -->
+  <a-plane rotation="-90 0 0" width="300" height="300" color="#4c7a3c"></a-plane>
 
-  <!-- 👻 MONSTRUO REAL -->
+  <!-- CIELO (día) -->
+  <a-sky color="#87CEEB"></a-sky>
+
+  <!-- ☀️ LUZ DEL SOL -->
+  <a-light type="ambient" intensity="0.9"></a-light>
+  <a-light type="directional" intensity="0.8" position="2 10 3"></a-light>
+
+  <!-- 🌕 LUNA -->
+  <a-sphere position="20 30 -50" radius="5" color="#ddd"></a-sphere>
+
+  <!-- 👻 MONSTRUO -->
   <a-entity id="monster"
     gltf-model="#monsterModel"
-    scale="0.8 0.8 0.8"
+    scale="1 1 1"
     position="0 0 -20">
   </a-entity>
 
 </a-scene>
 
 <script>
+let scene = document.querySelector("a-scene");
 let player = document.querySelector("#player");
 let cam = document.querySelector("#cam");
 let monster = document.querySelector("#monster");
@@ -62,86 +65,121 @@ let moving = false;
 
 // ACTIVAR
 document.getElementById("startBtn").onclick = async () => {
-  document.getElementById("startBtn").style.display = "none";
+  document.getElementById("startBtn").style.display="none";
 
   if (typeof DeviceMotionEvent !== "undefined" &&
       typeof DeviceMotionEvent.requestPermission === "function") {
-    try {
-      await DeviceMotionEvent.requestPermission();
-    } catch (e) {}
+    try { await DeviceMotionEvent.requestPermission(); } catch(e){}
   }
 
   started = true;
 };
 
-// 🚶 MOVIMIENTO SUAVE
-function move() {
-  if (!started || !moving) return;
+/////////////////////////
+// 🌲 BOSQUE + ARBUSTOS
+/////////////////////////
 
-  let pos = player.getAttribute("position");
+for(let i=0;i<120;i++){
+  let x=(Math.random()-0.5)*250;
+  let z=(Math.random()-0.5)*250;
 
-  let direction = new THREE.Vector3();
-  cam.object3D.getWorldDirection(direction);
+  // árbol
+  let tronco=document.createElement("a-cylinder");
+  tronco.setAttribute("position",`${x} 1.5 ${z}`);
+  tronco.setAttribute("radius","0.3");
+  tronco.setAttribute("height","3");
+  tronco.setAttribute("color","#6b4f2a");
 
-  pos.x += direction.x * 0.15;
-  pos.z += direction.z * 0.15;
+  let hojas=document.createElement("a-sphere");
+  hojas.setAttribute("position",`${x} 3.5 ${z}`);
+  hojas.setAttribute("radius","1.5");
+  hojas.setAttribute("color","#2e7d32");
 
-  player.setAttribute("position", pos);
+  scene.appendChild(tronco);
+  scene.appendChild(hojas);
+}
 
+// 🌿 arbustos
+for(let i=0;i<200;i++){
+  let x=(Math.random()-0.5)*250;
+  let z=(Math.random()-0.5)*250;
+
+  let bush=document.createElement("a-sphere");
+  bush.setAttribute("position",`${x} 0.5 ${z}`);
+  bush.setAttribute("radius","0.5");
+  bush.setAttribute("color","#1b5e20");
+
+  scene.appendChild(bush);
+}
+
+/////////////////////////
+// 🚶 MOVIMIENTO
+/////////////////////////
+
+function move(){
+  if(!started || !moving) return;
+
+  let pos=player.getAttribute("position");
+  let dir=new THREE.Vector3();
+  cam.object3D.getWorldDirection(dir);
+
+  pos.x+=dir.x*0.25;
+  pos.z+=dir.z*0.25;
+
+  player.setAttribute("position",pos);
   requestAnimationFrame(move);
 }
 
-// CONTROLES
-document.body.addEventListener("touchstart", () => {
-  if (!started) return;
-  moving = true;
+document.body.addEventListener("touchstart",()=>{
+  if(!started)return;
+  moving=true;
   move();
 });
 
-document.body.addEventListener("touchend", () => {
-  moving = false;
+document.body.addEventListener("touchend",()=>{
+  moving=false;
 });
 
-// 👁️ MONSTRUO TE SIGUE
-setInterval(() => {
-  let p = player.getAttribute("position");
-  let m = monster.getAttribute("position");
+/////////////////////////
+// 👁️ IA MONSTRUO
+/////////////////////////
 
-  let dx = p.x - m.x;
-  let dz = p.z - m.z;
+setInterval(()=>{
+  let p=player.getAttribute("position");
+  let m=monster.getAttribute("position");
 
-  m.x += dx * 0.02;
-  m.z += dz * 0.02;
+  let dx=p.x-m.x;
+  let dz=p.z-m.z;
 
-  monster.setAttribute("position", m);
-}, 100);
+  m.x+=dx*0.015;
+  m.z+=dz*0.015;
 
-// 👻 APARECE DETRÁS
-setInterval(() => {
-  let p = player.getAttribute("position");
-  let rot = player.getAttribute("rotation").y;
-  let rad = rot * (Math.PI / 180);
+  monster.setAttribute("position",m);
+},100);
 
-  let x = p.x + Math.sin(rad) * 6;
-  let z = p.z + Math.cos(rad) * 6;
+// teleport ocasional
+setInterval(()=>{
+  let p=player.getAttribute("position");
 
-  if (Math.random() < 0.4) {
-    monster.setAttribute("position", `${x} 0 ${z}`);
+  if(Math.random()<0.3){
+    let x=p.x+(Math.random()-0.5)*10;
+    let z=p.z+(Math.random()-0.5)*10;
+    monster.setAttribute("position",`${x} 0 ${z}`);
   }
-}, 5000);
+},6000);
 
-// 💀 GAME OVER
-setInterval(() => {
-  let p = player.getAttribute("position");
-  let m = monster.getAttribute("position");
+// game over
+setInterval(()=>{
+  let p=player.getAttribute("position");
+  let m=monster.getAttribute("position");
 
-  let dist = Math.sqrt((p.x - m.x)**2 + (p.z - m.z)**2);
+  let dist=Math.hypot(p.x-m.x,p.z-m.z);
 
-  if (dist < 1.5) {
+  if(dist<1.5){
     alert("💀 TE ATRAPÓ 💀");
     location.reload();
   }
-}, 400);
+},400);
 
 </script>
 
