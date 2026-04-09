@@ -1,65 +1,68 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>VR Passthrough - Objetos Fijos</title>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>VR Passthrough Anclado</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-</head>
-<body style="margin: 0; overflow: hidden;">
+  </head>
+  <body>
+    <!-- 
+      webxr="optionalFeatures: hit-test, local-floor" 
+      Esto le dice al teléfono que intente rastrear el suelo y la posición real 
+    -->
+    <a-scene 
+      webxr="optionalFeatures: hit-test, local-floor; referenceSpaceType: local-floor"
+      vr-mode-ui="enabled: true">
+      
+      <a-assets>
+        <video id="webcam" autoplay playsinline></video>
+      </a-assets>
 
-    <a-scene vr-mode-ui="enabled: true">
+      <!-- CÁMARA: El video se queda pegado a tus ojos -->
+      <a-entity camera look-controls wasd-controls position="0 1.6 0">
+        <a-video src="#webcam" 
+                 width="40" height="22.5" 
+                 position="0 0 -25"
+                 material="shader: flat; fog: false">
+        </a-video>
+      </a-entity>
+
+      <!-- OBJETOS ANCLADOS: Fuera de la cámara para que tengan coordenadas fijas -->
+      <!-- El nivel 0 del suelo se define donde inicias la app -->
+      <a-entity id="escena-anclada">
+        <a-box position="0 0.5 -3" color="#4CC3D9" shadow></a-box>
+        <a-sphere position="2 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+        <a-cylinder position="-2 0.75 -4" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
         
-        <a-assets>
-            <video id="webcam" autoplay playsinline crossorigin="anonymous"></video>
-        </a-assets>
+        <!-- Un suelo invisible para que las sombras y la perspectiva ayuden al cerebro -->
+        <a-grid static-body visible="false"></a-grid>
+      </a-entity>
 
-        <a-entity camera look-controls position="0 1.6 0">
-            <a-video src="#webcam" 
-                     width="32" height="18" 
-                     position="0 0 -20" 
-                     material="shader: flat; fog: false">
-            </a-video>
-        </a-entity>
-
-        <a-entity id="mundo-virtual">
-            <a-box position="0 1.5 -3" material="color: #4CC3D9; opacity: 0.8" animation="property: rotation; to: 0 360 0; loop: true; dur: 5000"></a-box>
-            
-            <a-sphere position="-3 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
-            
-            <a-cylinder position="3 0.75 -3" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
-            
-            <a-plane position="0 0 0" rotation="-90 0 0" width="100" height="100" visible="false"></a-plane>
-        </a-entity>
-
-        <a-light type="ambient" intensity="0.7"></a-light>
-        <a-light type="directional" position="-1 2 1"></a-light>
-
+      <a-light type="ambient" intensity="0.8"></a-light>
     </a-scene>
 
     <script>
-        const video = document.querySelector('#webcam');
+      const video = document.querySelector('#webcam');
 
-        // Configuración de cámara
-        navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-            }
-        })
-        .then(stream => {
-            video.srcObject = stream;
-            video.play();
-        })
-        .catch(err => {
-            console.error("Error:", err);
-            alert("Usa HTTPS para acceder a la cámara.");
-        });
+      // Máxima resolución para evitar que se vea borroso al anclar
+      navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      }).then(stream => {
+        video.srcObject = stream;
+        video.play();
+      });
 
-        // Forzar que el video no se pause al entrar en VR
-        document.querySelector('a-scene').addEventListener('enter-vr', () => {
-            setTimeout(() => { video.play(); }, 500);
-        });
+      // Truco de estabilidad: Forzar el refresco de la textura 
+      // para que no parezca que los objetos "vibran" sobre la cámara
+      const scene = document.querySelector('a-scene');
+      scene.addEventListener('enter-vr', () => {
+        // Aseguramos que el video no se detenga por ahorro de energía del modo VR
+        video.play();
+      });
     </script>
-</body>
+  </body>
 </html>
