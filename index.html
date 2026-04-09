@@ -95,12 +95,12 @@ for(let i=0;i<250;i++){
 // 🛣️ CAMINO
 for(let i=0;i<50;i++){
   let path=document.createElement("a-plane");
-  path.setAttribute("rotation","-90 0 0");
-  path.setAttribute("width","4");
-  path.setAttribute("height","4");
-  path.setAttribute("color","#8d6e63");
-  path.setAttribute("position",`${i*4-100} 0.02 0`);
-  scene.appendChild(path);
+path.setAttribute("rotation","-90 0 0");
+path.setAttribute("width","4");
+path.setAttribute("height","4");
+path.setAttribute("material","src: https://cdn.aframe.io/a-painter/images/floor.jpg; repeat: 2 2");
+path.setAttribute("position",`${i*4-100} 0.02 0`);
+scene.appendChild(path);
 }
 
 // 🏚️ CASA DETALLADA
