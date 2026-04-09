@@ -2,50 +2,68 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Passthrough Anclado Total</title>
-    <!-- Cargamos A-Frame y AR.js -->
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <title>VR Passthrough Reparado</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+      /* Evita que cualquier elemento de la interfaz tape la cámara */
+      .a-canvas { z-index: 0; }
+    </style>
   </head>
-  <body style="margin: 0; overflow: hidden;">
+  <body style="margin: 0; overflow: hidden; background-color: #000;">
 
-    <!-- 
-      Configuramos la escena para que sea de tipo AR.
-      sourceType: webcam -> Fuerza el uso de la cámara del teléfono como fondo real.
-    -->
-    <a-scene 
-      embedded 
-      arjs="sourceType: webcam; debugUIEnabled: false;" 
-      vr-mode-ui="enabled: true">
+    <a-scene vr-mode-ui="enabled: true" renderer="antialias: true; alpha: true;">
+      
+      <a-assets>
+        <video id="webcam" autoplay playsinline crossorigin="anonymous" loop="true"></video>
+      </a-assets>
 
-      <!-- 
-        Los objetos se anclan al "mundo". 
-        En AR.js, si no usas marcadores, los objetos se quedan en su posición GPS o local.
-      -->
-      <a-marker-camera preset="hiro">
-          <!-- Si quieres usar un marcador impreso (Hiro), pon los objetos aquí -->
-      </a-marker-camera>
+      <a-sky src="#webcam" material="shader: flat; fog: false" radius="100" rotation="0 -90 0"></a-sky>
 
-      <!-- Si quieres que estén anclados al ESPACIO (sin marcador) -->
-      <a-entity id="objetos-anclados">
-          <a-box position="0 0.5 -5" material="color: #4CC3D9; opacity: 0.9;" shadow></a-box>
-          <a-sphere position="2 1 -7" radius="1" color="#EF2D5E"></a-sphere>
-          <a-torus-knot position="-2 1.5 -6" radius="0.5" tube="0.15" color="#FFC65D"></a-torus-knot>
+      <a-entity camera look-controls position="0 1.6 0"></a-entity>
+
+      <a-entity id="mundo-real">
+        <a-box position="0 1 -3" material="color: #4CC3D9; opacity: 0.8;"></a-box>
+        <a-sphere position="3 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+        <a-cylinder position="-3 0.75 -4" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
       </a-entity>
 
-      <a-entity camera></a-entity>
+      <a-light type="ambient" intensity="1"></a-light>
     </a-scene>
 
     <script>
-      // Forzamos que la escena no intente usar el modo WebXR nativo que da el cuadro negro
-      window.addEventListener('load', () => {
-          const scene = document.querySelector('a-scene');
-          scene.addEventListener('enter-vr', () => {
-              if (scene.is('ar-mode')) {
-                  // Ajustes extra si entra en AR
-                  console.log("Modo AR Activo");
-              }
-          });
+      const video = document.querySelector('#webcam');
+      const scene = document.querySelector('a-scene');
+
+      // 1. Activar cámara con la mejor resolución posible
+      navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      })
+      .then(stream => {
+        video.srcObject = stream;
+        video.play().catch(e => console.log("Esperando interacción..."));
+      })
+      .catch(err => alert("Error: Necesitas HTTPS o permisos de cámara."));
+
+      // 2. REPARACIÓN DEL CUADRO NEGRO:
+      // Cuando el usuario entra en modo VR, el video suele pausarse. 
+      // Este evento lo despierta a la fuerza.
+      scene.addEventListener('enter-vr', () => {
+        console.log("Modo VR iniciado - Despertando cámara");
+        // Forzamos al video a reproducirse después de un micro-retraso
+        setTimeout(() => {
+          video.play();
+          // Ajuste de brillo para que no se vea oscuro
+          document.querySelector('a-sky').setAttribute('material', 'exposure', 2);
+        }, 1000);
+      });
+
+      // 3. Toque para móvil: Si se queda negro, un toque en la pantalla lo activa
+      document.body.addEventListener('click', () => {
+        video.play();
       });
     </script>
   </body>
