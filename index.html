@@ -2,89 +2,62 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Passthrough Profesional</title>
-    <!-- Cargamos A-Frame -->
+    <title>VR Passthrough - Objetos Fijos</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
-    </style>
 </head>
-<body>
+<body style="margin: 0; overflow: hidden;">
 
-    <a-scene 
-        renderer="antialias: true; colorManagement: true;" 
-        vr-mode-ui="enabled: true"
-        loading-screen="dotsColor: white; backgroundColor: black">
+    <a-scene vr-mode-ui="enabled: true">
         
         <a-assets>
-            <!-- El video con playsinline para que no se abra en pantalla completa en móviles -->
             <video id="webcam" autoplay playsinline crossorigin="anonymous"></video>
         </a-assets>
 
-        <!-- Cámara del Jugador -->
-        <a-entity camera look-controls>
-            <!-- 
-                EL PLANO DE PASSTHROUGH:
-                - Se coloca dentro de la cámara para que te siga a donde mires.
-                - Position 0 0 -1 es justo frente a tus ojos.
-                - El scale ajusta el tamaño para cubrir el campo de visión.
-            -->
+        <a-entity camera look-controls position="0 1.6 0">
             <a-video src="#webcam" 
-                     width="16" height="9" 
-                     position="0 0 -5" 
-                     scale="1.2 1.2 1.2">
+                     width="32" height="18" 
+                     position="0 0 -20" 
+                     material="shader: flat; fog: false">
             </a-video>
         </a-entity>
 
-        <!-- OBJETOS DE PRUEBA (Para ver que el VR funciona sobre la cámara) -->
-        <a-box position="-2 0.5 -3" rotation="0 45 0" color="#4CC3D9" shadow></a-box>
-        <a-sphere position="0 1.25 -4" radius="1.25" color="#EF2D5E" shadow></a-sphere>
-        <a-cylinder position="2 0.75 -3" radius="0.5" height="1.5" color="#FFC65D" shadow></a-cylinder>
+        <a-entity id="mundo-virtual">
+            <a-box position="0 1.5 -3" material="color: #4CC3D9; opacity: 0.8" animation="property: rotation; to: 0 360 0; loop: true; dur: 5000"></a-box>
+            
+            <a-sphere position="-3 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+            
+            <a-cylinder position="3 0.75 -3" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+            
+            <a-plane position="0 0 0" rotation="-90 0 0" width="100" height="100" visible="false"></a-plane>
+        </a-entity>
 
-        <!-- Iluminación básica -->
-        <a-light type="ambient" color="#fff"></a-light>
-        <a-light type="directional" color="#EEE" intensity="0.5" position="-1 1 2"></a-light>
+        <a-light type="ambient" intensity="0.7"></a-light>
+        <a-light type="directional" position="-1 2 1"></a-light>
 
     </a-scene>
 
     <script>
         const video = document.querySelector('#webcam');
 
-        // Configuración de cámara de alta fidelidad
-        async function setupCamera() {
-            const constraints = {
-                video: {
-                    facingMode: 'environment', // Cámara trasera
-                    width: { ideal: 1920 },    // Intentar Full HD
-                    height: { ideal: 1080 }
-                },
-                audio: false
-            };
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-                
-                // Forzamos al motor a entender que el video ya tiene dimensiones
-                video.addEventListener('loadedmetadata', () => {
-                    video.play();
-                });
-            } catch (err) {
-                console.error("Error crítico de cámara:", err);
-                alert("No se pudo acceder a la cámara. Revisa si estás en HTTPS.");
+        // Configuración de cámara
+        navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
             }
-        }
+        })
+        .then(stream => {
+            video.srcObject = stream;
+            video.play();
+        })
+        .catch(err => {
+            console.error("Error:", err);
+            alert("Usa HTTPS para acceder a la cámara.");
+        });
 
-        // Iniciar cámara al cargar
-        setupCamera();
-
-        // Solución al problema de cierre: Prevenir que WebXR intente 
-        // usar el passthrough de hardware si no está disponible.
-        const scene = document.querySelector('a-scene');
-        scene.addEventListener('enter-vr', () => {
-            console.log("Entrando en modo VR...");
-            // Si el video se pausa al entrar en VR, lo forzamos a seguir
+        // Forzar que el video no se pause al entrar en VR
+        document.querySelector('a-scene').addEventListener('enter-vr', () => {
             setTimeout(() => { video.play(); }, 500);
         });
     </script>
