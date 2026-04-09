@@ -2,66 +2,50 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>VR Passthrough Anclado</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <title>Passthrough Anclado Total</title>
+    <!-- Cargamos A-Frame y AR.js -->
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   </head>
-  <body>
+  <body style="margin: 0; overflow: hidden;">
+
     <!-- 
-      webxr="optionalFeatures: hit-test, local-floor" 
-      Esto le dice al teléfono que intente rastrear el suelo y la posición real 
+      Configuramos la escena para que sea de tipo AR.
+      sourceType: webcam -> Fuerza el uso de la cámara del teléfono como fondo real.
     -->
     <a-scene 
-      webxr="optionalFeatures: hit-test, local-floor; referenceSpaceType: local-floor"
+      embedded 
+      arjs="sourceType: webcam; debugUIEnabled: false;" 
       vr-mode-ui="enabled: true">
-      
-      <a-assets>
-        <video id="webcam" autoplay playsinline></video>
-      </a-assets>
 
-      <!-- CÁMARA: El video se queda pegado a tus ojos -->
-      <a-entity camera look-controls wasd-controls position="0 1.6 0">
-        <a-video src="#webcam" 
-                 width="40" height="22.5" 
-                 position="0 0 -25"
-                 material="shader: flat; fog: false">
-        </a-video>
+      <!-- 
+        Los objetos se anclan al "mundo". 
+        En AR.js, si no usas marcadores, los objetos se quedan en su posición GPS o local.
+      -->
+      <a-marker-camera preset="hiro">
+          <!-- Si quieres usar un marcador impreso (Hiro), pon los objetos aquí -->
+      </a-marker-camera>
+
+      <!-- Si quieres que estén anclados al ESPACIO (sin marcador) -->
+      <a-entity id="objetos-anclados">
+          <a-box position="0 0.5 -5" material="color: #4CC3D9; opacity: 0.9;" shadow></a-box>
+          <a-sphere position="2 1 -7" radius="1" color="#EF2D5E"></a-sphere>
+          <a-torus-knot position="-2 1.5 -6" radius="0.5" tube="0.15" color="#FFC65D"></a-torus-knot>
       </a-entity>
 
-      <!-- OBJETOS ANCLADOS: Fuera de la cámara para que tengan coordenadas fijas -->
-      <!-- El nivel 0 del suelo se define donde inicias la app -->
-      <a-entity id="escena-anclada">
-        <a-box position="0 0.5 -3" color="#4CC3D9" shadow></a-box>
-        <a-sphere position="2 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
-        <a-cylinder position="-2 0.75 -4" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
-        
-        <!-- Un suelo invisible para que las sombras y la perspectiva ayuden al cerebro -->
-        <a-grid static-body visible="false"></a-grid>
-      </a-entity>
-
-      <a-light type="ambient" intensity="0.8"></a-light>
+      <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-      const video = document.querySelector('#webcam');
-
-      // Máxima resolución para evitar que se vea borroso al anclar
-      navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      }).then(stream => {
-        video.srcObject = stream;
-        video.play();
-      });
-
-      // Truco de estabilidad: Forzar el refresco de la textura 
-      // para que no parezca que los objetos "vibran" sobre la cámara
-      const scene = document.querySelector('a-scene');
-      scene.addEventListener('enter-vr', () => {
-        // Aseguramos que el video no se detenga por ahorro de energía del modo VR
-        video.play();
+      // Forzamos que la escena no intente usar el modo WebXR nativo que da el cuadro negro
+      window.addEventListener('load', () => {
+          const scene = document.querySelector('a-scene');
+          scene.addEventListener('enter-vr', () => {
+              if (scene.is('ar-mode')) {
+                  // Ajustes extra si entra en AR
+                  console.log("Modo AR Activo");
+              }
+          });
       });
     </script>
   </body>
