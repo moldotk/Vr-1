@@ -1,166 +1,51 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Lofi VR Chill Zone - Pro</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #050505; font-family: sans-serif; }
-        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; 
-                   flex-direction: column; justify-content: center; align-items: center; 
-                   background: rgba(0,0,0,0.9); z-index: 10; color: #ff0055; text-align: center; }
-        button { padding: 25px 50px; font-size: 1.5rem; background: #ff0055; color: white; 
-                 border: none; border-radius: 50px; cursor: pointer; font-weight: bold; 
-                 box-shadow: 0 0 20px rgba(255,0,85,0.5); }
-        p { margin-top: 20px; color: #888; max-width: 400px; }
-    </style>
-</head>
-<body>
-    <div id="overlay">
-        <h1>LOFI VR RELAX</h1>
-        <button id="start-vr">ENTRAR AL RELAX</button>
-        <p>Ponte tu visor. Asegúrate de tener espacio despejado. Se escuchará sonido de lluvia y música.</p>
-    </div>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>VR Passthrough Plano</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
 
-    <audio id="ambient-sound" loop>
-        <source src="https://cdn.pixabay.com/audio/2022/10/05/audio_51cb4976a4.mp3" type="audio/mpeg">
-    </audio>
+    <a-scene vr-mode-ui="enabled: true">
+      <a-assets>
+        <!-- Cargamos el video de la cámara -->
+        <video id="webcam" autoplay playsinline crossorigin="anonymous"></video>
+      </a-assets>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
+      <!-- El "Sky" ahora es tu cámara. 
+           Usamos un radio grande para que se sienta plano y no esférico -->
+      <a-sky src="#webcam" rotation="0 -90 0"></a-sky>
+
+      <!-- Aquí puedes añadir tus objetos de juego en VR -->
+      <a-box position="-1 0.5 -3" rotation="0 45 0" color="#4CC3D9"></a-box>
+      <a-sphere position="0 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+      
+      <a-entity camera look-controls position="0 1.6 0"></a-entity>
+    </a-scene>
+
+    <script>
+      const video = document.querySelector('#webcam');
+
+      // Configuración para cámara trasera sin distorsión
+      const constraints = {
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      };
+
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          video.srcObject = stream;
+          video.play();
+        })
+        .catch(err => {
+          alert("Error: Asegúrate de usar HTTPS y dar permisos de cámara.");
+          console.error(err);
+        });
     </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
-
-        let scene, camera, renderer;
-        const ambientAudio = document.getElementById('ambient-sound');
-
-        init();
-
-        function init() {
-            scene = new THREE.Scene();
-            // Niebla para dar profundidad y atmósfera
-            scene.fog = new THREE.Fog(0x1a1a2e, 2, 12);
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 25);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            // IMPORTANTE: Suelo local para caminar
-            renderer.xr.setReferenceSpaceType('local-floor'); 
-            document.body.appendChild(renderer.domElement);
-
-            // --- AMBIENTE: SKYSPHERE (Ciudad de Noche Lofi) ---
-            const skyGeo = new THREE.SphereGeometry(20, 32, 32);
-            // Usamos una textura degradada para el cielo
-            const skyMat = new THREE.MeshBasicMaterial({ color: 0x1a1a2e, side: THREE.BackSide });
-            const sky = new THREE.Mesh(skyGeo, skyMat);
-            scene.add(sky);
-
-            // --- LUCES ATMOSFÉRICAS ---
-            const ambientLight = new THREE.AmbientLight(0x4040ff, 0.5); // Luz azul difusa
-            scene.add(ambientLight);
-            
-            const pointLight1 = new THREE.PointLight(0xff0055, 3, 5); // Neón Rosa
-            pointLight1.position.set(-2, 2, -2);
-            scene.add(pointLight1);
-            
-            const pointLight2 = new THREE.PointLight(0x00ffff, 2, 6); // Neón Cian
-            pointLight2.position.set(3, 1.5, -3);
-            scene.add(pointLight2);
-
-            // --- ESCENARIO DE ALTA CALIDAD (No palitos) ---
-            
-            // Suelo de Concreto Desgastado con rejilla neón
-            const groundGeo = new THREE.PlaneGeometry(15, 15);
-            const groundMat = new THREE.MeshStandardMaterial({ 
-                color: 0x222222, 
-                metalness: 0.6, 
-                roughness: 0.8,
-                emissive: 0x000022
-            });
-            const ground = new THREE.Mesh(groundGeo, groundMat);
-            ground.rotation.x = -Math.PI / 2;
-            scene.add(ground);
-
-            const grid = new THREE.GridHelper(15, 30, 0xff0055, 0x111111);
-            grid.position.y = 0.01;
-            scene.add(grid);
-
-            // Estructuras de Madera y Neón (Caminos)
-            const boxGeo = new THREE.BoxGeometry(0.5, 0.1, 4);
-            const woodMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, metalness: 0.1, roughness: 0.9 });
-            
-            for(let i = 0; i < 4; i++) {
-                const path = new THREE.Mesh(boxGeo, woodMat);
-                path.position.set(i*2 - 3, 0.05, -2);
-                scene.add(path);
-                
-                // Tira de neón en el borde
-                const neonGeo = new THREE.BoxGeometry(0.05, 0.05, 4);
-                const neonMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
-                const neon = new THREE.Mesh(neonGeo, neonMat);
-                neon.position.set(i*2 - 3 + 0.25, 0.1, -2);
-                scene.add(neon);
-            }
-
-            // --- OBJETOS DE DETALLE Lofi ---
-            
-            // "Árboles" de Partículas Neón (Geminads)
-            const partGeo = new THREE.IcosahedronGeometry(0.2, 0);
-            const partMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xff0055, emissiveIntensity: 2 });
-            
-            for(let i = 0; i < 6; i++) {
-                const crystal = new THREE.Mesh(partGeo, partMat);
-                crystal.position.set(Math.random()*10 - 5, 2 + Math.random(), -4 - Math.random()*4);
-                scene.add(crystal);
-            }
-
-            // Columna de agua/lluvia estática
-            const waterGeo = new THREE.CylinderGeometry(0.1, 0.1, 4, 16);
-            const waterMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, emissive: 0x00ffff });
-            const waterColumn = new THREE.Mesh(waterGeo, waterMat);
-            waterColumn.position.set(3, 2, -3);
-            scene.add(waterColumn);
-
-            // --- BOTÓN E INICIO DE SESIÓN ---
-            document.getElementById('start-vr').onclick = () => {
-                // Iniciar Audio
-                ambientAudio.play().catch(e => console.error("Error al reproducir audio:", e));
-                
-                // Iniciar Sesión VR con Movimiento de 6 Grados (6DOF)
-                navigator.xr.requestSession('immersive-vr', {
-                    requiredFeatures: ['local-floor'] // REQUERIDO PARA CAMINAR Y AGACHARSE
-                }).then(session => {
-                    renderer.xr.setSession(session);
-                    document.getElementById('overlay').style.display = 'none';
-                });
-            };
-
-            renderer.setAnimationLoop(render);
-        }
-
-        function render(time) {
-            // Animación sutil de las "luces neón"
-            scene.traverse(child => {
-                if(child.isMesh && child.material.emissiveIntensity !== undefined) {
-                    if(child.geometry.type === "IcosahedronGeometry") {
-                        child.material.emissiveIntensity = 2 + Math.sin(time / 500 + child.position.x) * 0.5;
-                        child.rotation.y += 0.005;
-                    }
-                }
-            });
-
-            renderer.render(scene, camera);
-        }
-    </script>
-</body>
+  </body>
 </html>
