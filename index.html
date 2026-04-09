@@ -2,23 +2,32 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>VR Walk & Hands - Pro Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Ultimate XR Fusion - Oppo A79</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
-        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; 
-                   flex-direction: column; justify-content: center; align-items: center; 
-                   background: rgba(0,0,0,0.85); z-index: 10; color: white; text-align: center; }
-        button { padding: 20px 40px; font-size: 1.5rem; background: #0088ff; color: white; 
-                 border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
-        p { margin-top: 20px; color: #aaa; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; background: rgba(0,0,0,0.9); z-index: 100;
+            color: white; text-align: center; padding: 20px;
+        }
+        button {
+            padding: 20px 40px; font-size: 1.5rem; background: #00ff88;
+            border: none; border-radius: 50px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 0 20px rgba(0,255,136,0.5);
+        }
+        #video-feed { display: none; }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1>MODO CAMINATA VR</h1>
-        <button id="start-vr">INICIAR JUEGO</button>
-        <p>Asegúrate de tener espacio despejado para caminar.</p>
+        <h1>REDACTOR XR FUSION</h1>
+        <p>1. Acepta permisos de cámara.<br>2. Pon el móvil en el visor.<br>3. Camina para moverte.</p>
+        <button id="btn-start">INICIAR EXPERIENCIA</button>
     </div>
+    
+    <video id="video-feed" autoplay playsinline></video>
 
     <script type="importmap">
         {
@@ -33,17 +42,13 @@
         import * as THREE from 'three';
         import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-        let scene, camera, renderer;
-        let hand1, hand2;
+        let scene, camera, renderer, crystal;
+        const video = document.getElementById('video-feed');
 
-        init();
-
-        function init() {
+        async function init() {
+            // --- CONFIGURACIÓN DE ESCENA ---
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0a0a10);
-            scene.fog = new THREE.Fog(0x0a0a10, 2, 10); // Niebla para dar profundidad
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 50);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -51,70 +56,90 @@
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // --- LUCES DETALLADAS ---
-            const ambient = new THREE.AmbientLight(0x404040, 2);
-            scene.add(ambient);
-            const sun = new THREE.DirectionalLight(0x0088ff, 3);
-            sun.position.set(5, 10, 5);
-            scene.add(sun);
+            // --- FONDO: TEXTURA DE CÁMARA PARA EVITAR PANTALLA NEGRA ---
+            const texture = new THREE.VideoTexture(video);
+            const skyGeo = new THREE.SphereGeometry(15, 32, 32);
+            const skyMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+            const sky = new THREE.Mesh(skyGeo, skyMat);
+            scene.add(sky);
 
-            // --- ESCENARIO PARA CAMINAR (Suelo y Columnas) ---
-            // Suelo con rejilla para notar el movimiento
-            const grid = new THREE.GridHelper(20, 40, 0x0088ff, 0x222222);
+            // --- ILUMINACIÓN ---
+            const ambient = new THREE.AmbientLight(0xffffff, 1);
+            scene.add(ambient);
+            const pointLight = new THREE.PointLight(0x00ff88, 15);
+            pointLight.position.set(0, 3, 2);
+            scene.add(pointLight);
+
+            // --- ELEMENTOS DE REFERENCIA PARA CAMINAR ---
+            // Suelo (Grid) para notar el avance
+            const grid = new THREE.GridHelper(50, 100, 0x00ff88, 0x222222);
+            grid.position.y = -0.01;
             scene.add(grid);
 
-            // Columnas sólidas (No palitos)
-            const colGeo = new THREE.BoxGeometry(0.3, 2, 0.3);
-            const colMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.2 });
-            
-            for(let i = 0; i < 10; i++) {
-                const col = new THREE.Mesh(colGeo, colMat);
-                col.position.set(Math.random() * 8 - 4, 1, Math.random() * 8 - 4);
-                scene.add(col);
+            // Columnas flotantes sólidas
+            const boxGeo = new THREE.BoxGeometry(0.2, 1, 0.2);
+            const boxMat = new THREE.MeshStandardMaterial({ color: 0x0088ff, metalness: 0.8, roughness: 0.1 });
+            for(let i=0; i<15; i++) {
+                const box = new THREE.Mesh(boxGeo, boxMat);
+                box.position.set(Math.random()*10-5, 0.5, Math.random()*-15);
+                scene.add(box);
             }
 
-            // --- OBJETO INTERACTIVO (Gema) ---
+            // --- CRISTAL INTERACTIVO ---
             const gemaGeo = new THREE.OctahedronGeometry(0.15, 0);
-            const gemaMat = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.5 });
-            const gema = new THREE.Mesh(gemaGeo, gemaMat);
-            gema.position.set(0, 1.5, -1);
-            scene.add(gema);
+            const gemaMat = new THREE.MeshStandardMaterial({ 
+                color: 0x00ff88, 
+                metalness: 1, 
+                roughness: 0, 
+                emissive: 0x00ff88, 
+                emissiveIntensity: 0.5 
+            });
+            crystal = new THREE.Mesh(gemaGeo, gemaMat);
+            crystal.position.set(0, 1.5, -1);
+            scene.add(crystal);
 
-            // --- MANOS ---
-            const factory = new XRHandModelFactory();
-            hand1 = renderer.xr.getHand(0);
-            hand1.add(factory.createHandModel(hand1, "mesh"));
-            scene.add(hand1);
-
-            hand2 = renderer.xr.getHand(1);
-            hand2.add(factory.createHandModel(hand2, "mesh"));
-            scene.add(hand2);
-
-            // --- BOTÓN E INICIO DE SESIÓN ---
-            document.getElementById('start-vr').onclick = () => {
-                navigator.xr.requestSession('immersive-vr', {
-                    requiredFeatures: ['local-floor'], // ESTO HABILITA EL CAMINAR
-                    optionalFeatures: ['hand-tracking']
-                }).then(session => {
-                    renderer.xr.setSession(session);
-                    document.getElementById('overlay').style.display = 'none';
-                });
-            };
+            // --- MANOS CON OCLUSIÓN ---
+            const handFactory = new XRHandModelFactory();
+            for(let i=0; i<2; i++) {
+                const hand = renderer.xr.getHand(i);
+                hand.add(handFactory.createHandModel(hand, "mesh"));
+                // Las manos ocultan lo virtual
+                hand.traverse(c => { if(c.isMesh) c.material = new THREE.MeshBasicMaterial({colorWrite: false}); });
+                scene.add(hand);
+            }
 
             renderer.setAnimationLoop(render);
         }
 
         function render(time) {
-            // Animación suave del cristal
-            scene.traverse(child => {
-                if(child.isMesh && child.geometry.type === "OctahedronGeometry") {
-                    child.rotation.y += 0.01;
-                    child.position.y = 1.5 + Math.sin(time / 1000) * 0.1;
-                }
-            });
-
+            crystal.rotation.y = time / 1000;
             renderer.render(scene, camera);
         }
+
+        // Lógica de inicio
+        document.getElementById('btn-start').onclick = async () => {
+            try {
+                // 1. Activar cámara
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                await video.play();
+
+                // 2. Iniciar Three.js
+                await init();
+
+                // 3. Iniciar Sesión WebXR (Modo Tolerante)
+                const session = await navigator.xr.requestSession('immersive-vr', {
+                    optionalFeatures: ['local-floor', 'hand-tracking', 'layers']
+                });
+
+                renderer.xr.setSession(session);
+                document.getElementById('overlay').style.display = 'none';
+
+            } catch (e) {
+                console.error(e);
+                alert("Error de sensores o permisos. Usa HTTPS.");
+            }
+        };
     </script>
 </body>
 </html>
