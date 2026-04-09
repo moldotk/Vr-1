@@ -3,14 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Juego AR Handtracking Android</title>
+    <title>Mixed Reality Fusion</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
-        #info { position: absolute; top: 10px; width: 100%; text-align: center; color: white; font-family: sans-serif; pointer-events: none; z-index: 10; }
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #start-btn {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            padding: 20px 40px; border: 2px solid #00ff88; background: rgba(0,0,0,0.8);
+            color: #00ff88; font-weight: bold; border-radius: 50px; cursor: pointer; z-index: 100;
+        }
     </style>
 </head>
 <body>
-    <div id="info">Busca el botón "Start AR" abajo</div>
+    <button id="start-btn">INICIAR FUSIÓN XR</button>
 
     <script type="importmap">
         {
@@ -23,138 +27,107 @@
 
     <script type="module">
         import * as THREE from 'three';
-        import { ARButton } from 'three/addons/webxr/ARButton.js';
         import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-        let scene, camera, renderer, object;
+        let scene, camera, renderer, crystal;
         let hand1, hand2;
-        let handModelFactory;
-
-        // Variables para la lógica de agarre
-        let isGrabbing = false;
 
         init();
-        animate();
 
         function init() {
-            // --- SCENE CONFIG ---
             scene = new THREE.Scene();
-            
-            // Importante: No establecer scene.background para que se vea la cámara
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            // --- CAMERA CONFIG ---
-            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 20);
-
-            // --- RENDERER CONFIG ---
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true; // Habilitar WebXR
+            renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // --- AÑADIR BOTÓN AR ESPECÍFICO PARA ANDROID ---
-            // Solicitamos la característica opcional 'hand-tracking'
-            document.body.appendChild(ARButton.createButton(renderer, {
-                requiredFeatures: ['hit-test'], // hit-test suele ayudar a estabilizar la sesión AR en Android
-                optionalFeatures: ['hand-tracking'] 
-            }));
+            // --- AMBIENTE FUSIONADO (Luz de VR en el mundo real) ---
+            const light = new THREE.PointLight(0x00ff88, 5, 10);
+            light.position.set(0, 2, 0);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-            // --- ILUMINACIÓN (Crucial para el "super detalle") ---
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); // Luz base suave
-            scene.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
-            directionalLight.position.set(1, 2, 1);
-            directionalLight.castShadow = true;
-            scene.add(directionalLight);
-
-            // --- OBJETO DETALLADO (Un TorusKnot PBR) ---
-            const geometry = new THREE.TorusKnotGeometry(0.06, 0.02, 150, 20);
+            // --- OBJETO DE ALTO DETALLE ---
+            const geometry = new THREE.OctahedronGeometry(0.1, 0);
             const material = new THREE.MeshStandardMaterial({ 
-                color: 0xff3300, 
-                metalness: 0.9, 
-                roughness: 0.1,
-                emissive: 0x220000
+                color: 0x00ff88, 
+                metalness: 1, 
+                roughness: 0,
+                transparent: true,
+                opacity: 0.8,
+                emissive: 0x00ff88,
+                emissiveIntensity: 0.5
             });
-            object = new THREE.Mesh(geometry, material);
-            object.position.set(0, 0, -0.3); // Posición inicial frente a la cámara
-            object.castShadow = true;
-            scene.add(object);
+            crystal = new THREE.Mesh(geometry, material);
+            crystal.position.set(0, 1.2, -0.4);
+            scene.add(crystal);
 
-            // --- CONFIGURACIÓN DE MODELOS DE MANOS ---
-            handModelFactory = new XRHandModelFactory();
+            // --- SISTEMA DE PARTÍCULAS (Elemento VR flotando en AR) ---
+            const partGeo = new THREE.BufferGeometry();
+            const posArr = new Float32Array(300);
+            for(let i=0; i<300; i++) posArr[i] = (Math.random() - 0.5) * 2;
+            partGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+            const partMat = new THREE.PointsMaterial({ color: 0x00ff88, size: 0.005 });
+            const particles = new THREE.Points(partGeo, partMat);
+            scene.add(particles);
 
-            // Mano 1
-            hand1 = renderer.xr.getHand(0);
-            hand1.add(handModelFactory.createHandModel(hand1, "mesh"));
-            scene.add(hand1);
+            // --- CONFIGURACIÓN DE MANOS CON OCLUSIÓN ---
+            setupHands();
 
-            // Mano 2
-            hand2 = renderer.xr.getHand(1);
-            hand2.add(handModelFactory.createHandModel(hand2, "mesh"));
-            scene.add(hand2);
+            // --- BOTÓN DE INICIO ---
+            const btn = document.getElementById('start-btn');
+            btn.onclick = async () => {
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    optionalFeatures: ['hand-tracking', 'local-floor']
+                });
+                renderer.xr.setSession(session);
+                btn.style.display = 'none';
+            };
 
-            // Eventos de redimensionado
-            window.addEventListener('resize', onWindowResize, false);
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            // Usar setAnimationLoop es obligatorio para WebXR
             renderer.setAnimationLoop(render);
         }
 
-        function render() {
-            // Rotación suave del objeto si no está siendo agarrado
-            if (!isGrabbing) {
-                object.rotation.x += 0.01;
-                object.rotation.y += 0.01;
-            }
-
-            // --- LÓGICA EXPERIMENTAL DE AGARRE (Pinche) ---
-            // En Android Chrome, obtener las articulaciones (joints) es experimental
-            checkHandInteraction(hand1);
-            checkHandInteraction(hand2);
-
-            renderer.render(scene, camera);
+        function setupHands() {
+            const handFactory = new XRHandModelFactory();
+            [0, 1].forEach(i => {
+                const hand = renderer.xr.getHand(i);
+                const model = handFactory.createHandModel(hand, "mesh");
+                hand.add(model);
+                
+                // Efecto de Oclusión: La mano oculta lo virtual pero deja ver la cámara
+                model.addEventListener('connected', (e) => {
+                    e.target.traverse(c => {
+                        if (c.isMesh) {
+                            c.material = new THREE.MeshBasicMaterial({ colorWrite: false });
+                        }
+                    });
+                });
+                scene.add(hand);
+                if(i === 0) hand1 = hand; else hand2 = hand;
+            });
         }
 
-        function checkHandInteraction(hand) {
-            // Comprobamos si la sesión XR está activa y si tenemos acceso a las articulaciones
-            const session = renderer.xr.getSession();
-            if (session && hand.joints) {
-                // Obtenemos las puntas del índice y pulgar (puntos 9 y 4 en el estándar)
-                const indexTip = hand.joints['index-finger-tip'];
-                const thumbTip = hand.joints['thumb-tip'];
+        function render(time) {
+            crystal.rotation.y = time / 1000;
+            crystal.position.y = 1.2 + Math.sin(time / 500) * 0.05;
 
-                // Si ambas articulaciones están siendo rastreadas
-                if (indexTip && thumbTip && indexTip.visible && thumbTip.visible) {
-                    const distance = indexTip.position.distanceTo(thumbTip.position);
-
-                    // Si la distancia es menor a 2.5cm, consideramos que hay pellizco
-                    if (distance < 0.025) {
-                        const distToObject = indexTip.position.distanceTo(object.position);
-
-                        // Si la mano está cerca del objeto, lo movemos
-                        if (distToObject < 0.1) {
-                            object.position.copy(indexTip.position);
-                            isGrabbing = true;
-                            object.material.emissive.setHex(0x00ff00); // Feedback visual: Verde
-                        }
-                    } else {
-                        // Si se suelta el pellizco asociado a este objeto
-                        if(isGrabbing && indexTip.position.distanceTo(object.position) < 0.05) {
-                            isGrabbing = false;
-                            object.material.emissive.setHex(0x220000); // Feedback visual: Normal
+            // Detección de pellizco para mover el cristal
+            [hand1, hand2].forEach(h => {
+                if(h && h.joints && h.joints['index-finger-tip']) {
+                    const index = h.joints['index-finger-tip'];
+                    const thumb = h.joints['thumb-tip'];
+                    if(index.position.distanceTo(thumb.position) < 0.02) {
+                        if(index.position.distanceTo(crystal.position) < 0.1) {
+                            crystal.position.copy(index.position);
                         }
                     }
                 }
-            }
+            });
+
+            renderer.render(scene, camera);
         }
     </script>
 </body>
