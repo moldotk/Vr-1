@@ -1,70 +1,120 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>VR Passthrough Reparado</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>VR Walk & Hands - Pro Edition</title>
     <style>
-      /* Evita que cualquier elemento de la interfaz tape la cámara */
-      .a-canvas { z-index: 0; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; 
+                   flex-direction: column; justify-content: center; align-items: center; 
+                   background: rgba(0,0,0,0.85); z-index: 10; color: white; text-align: center; }
+        button { padding: 20px 40px; font-size: 1.5rem; background: #0088ff; color: white; 
+                 border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
+        p { margin-top: 20px; color: #aaa; }
     </style>
-  </head>
-  <body style="margin: 0; overflow: hidden; background-color: #000;">
+</head>
+<body>
+    <div id="overlay">
+        <h1>MODO CAMINATA VR</h1>
+        <button id="start-vr">INICIAR JUEGO</button>
+        <p>Asegúrate de tener espacio despejado para caminar.</p>
+    </div>
 
-    <a-scene vr-mode-ui="enabled: true" renderer="antialias: true; alpha: true;">
-      
-      <a-assets>
-        <video id="webcam" autoplay playsinline crossorigin="anonymous" loop="true"></video>
-      </a-assets>
-
-      <a-sky src="#webcam" material="shader: flat; fog: false" radius="100" rotation="0 -90 0"></a-sky>
-
-      <a-entity camera look-controls position="0 1.6 0"></a-entity>
-
-      <a-entity id="mundo-real">
-        <a-box position="0 1 -3" material="color: #4CC3D9; opacity: 0.8;"></a-box>
-        <a-sphere position="3 1.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
-        <a-cylinder position="-3 0.75 -4" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
-      </a-entity>
-
-      <a-light type="ambient" intensity="1"></a-light>
-    </a-scene>
-
-    <script>
-      const video = document.querySelector('#webcam');
-      const scene = document.querySelector('a-scene');
-
-      // 1. Activar cámara con la mejor resolución posible
-      navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
-      })
-      .then(stream => {
-        video.srcObject = stream;
-        video.play().catch(e => console.log("Esperando interacción..."));
-      })
-      .catch(err => alert("Error: Necesitas HTTPS o permisos de cámara."));
-
-      // 2. REPARACIÓN DEL CUADRO NEGRO:
-      // Cuando el usuario entra en modo VR, el video suele pausarse. 
-      // Este evento lo despierta a la fuerza.
-      scene.addEventListener('enter-vr', () => {
-        console.log("Modo VR iniciado - Despertando cámara");
-        // Forzamos al video a reproducirse después de un micro-retraso
-        setTimeout(() => {
-          video.play();
-          // Ajuste de brillo para que no se vea oscuro
-          document.querySelector('a-sky').setAttribute('material', 'exposure', 2);
-        }, 1000);
-      });
-
-      // 3. Toque para móvil: Si se queda negro, un toque en la pantalla lo activa
-      document.body.addEventListener('click', () => {
-        video.play();
-      });
     </script>
-  </body>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+
+        let scene, camera, renderer;
+        let hand1, hand2;
+
+        init();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a10);
+            scene.fog = new THREE.Fog(0x0a0a10, 2, 10); // Niebla para dar profundidad
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // --- LUCES DETALLADAS ---
+            const ambient = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0x0088ff, 3);
+            sun.position.set(5, 10, 5);
+            scene.add(sun);
+
+            // --- ESCENARIO PARA CAMINAR (Suelo y Columnas) ---
+            // Suelo con rejilla para notar el movimiento
+            const grid = new THREE.GridHelper(20, 40, 0x0088ff, 0x222222);
+            scene.add(grid);
+
+            // Columnas sólidas (No palitos)
+            const colGeo = new THREE.BoxGeometry(0.3, 2, 0.3);
+            const colMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.2 });
+            
+            for(let i = 0; i < 10; i++) {
+                const col = new THREE.Mesh(colGeo, colMat);
+                col.position.set(Math.random() * 8 - 4, 1, Math.random() * 8 - 4);
+                scene.add(col);
+            }
+
+            // --- OBJETO INTERACTIVO (Gema) ---
+            const gemaGeo = new THREE.OctahedronGeometry(0.15, 0);
+            const gemaMat = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.5 });
+            const gema = new THREE.Mesh(gemaGeo, gemaMat);
+            gema.position.set(0, 1.5, -1);
+            scene.add(gema);
+
+            // --- MANOS ---
+            const factory = new XRHandModelFactory();
+            hand1 = renderer.xr.getHand(0);
+            hand1.add(factory.createHandModel(hand1, "mesh"));
+            scene.add(hand1);
+
+            hand2 = renderer.xr.getHand(1);
+            hand2.add(factory.createHandModel(hand2, "mesh"));
+            scene.add(hand2);
+
+            // --- BOTÓN E INICIO DE SESIÓN ---
+            document.getElementById('start-vr').onclick = () => {
+                navigator.xr.requestSession('immersive-vr', {
+                    requiredFeatures: ['local-floor'], // ESTO HABILITA EL CAMINAR
+                    optionalFeatures: ['hand-tracking']
+                }).then(session => {
+                    renderer.xr.setSession(session);
+                    document.getElementById('overlay').style.display = 'none';
+                });
+            };
+
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(time) {
+            // Animación suave del cristal
+            scene.traverse(child => {
+                if(child.isMesh && child.geometry.type === "OctahedronGeometry") {
+                    child.rotation.y += 0.01;
+                    child.position.y = 1.5 + Math.sin(time / 1000) * 0.1;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
 </html>
