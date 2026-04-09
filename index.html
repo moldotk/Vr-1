@@ -1,199 +1,138 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-<style>
-body { margin:0; overflow:hidden; }
-
-#ui{
-position:fixed;
-top:10px;
-left:10px;
-color:white;
-font-family:Arial;
-background:rgba(0,0,0,0.5);
-padding:10px;
-border-radius:10px;
-z-index:10;
-}
-video{
-position:fixed;
-top:0;
-left:0;
-width:100%;
-height:100%;
-object-fit:cover;
-z-index:-1;
-}
-</style>
+    <meta charset="UTF-8">
+    <title>High-End WebXR Hand Interaction</title>
+    <style>
+        body { margin: 0; background: #000; }
+        #instructions { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #555; font-family: sans-serif; pointer-events: none; }
+    </style>
 </head>
-
 <body>
+    <div id="instructions">Usa tus manos para pellizcar y mover el cubo</div>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
 
-<div id="ui">
-Score: <span id="score">0</span><br>
-Time: <span id="time">60</span>
-</div>
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-<video id="video" autoplay playsinline></video>
+        let scene, camera, renderer, cube;
+        let hands = [];
+        const handModelFactory = new XRHandModelFactory();
 
-<a-scene embedded vr-mode-ui="enabled: true" xr-mode-ui="enabled: true">
+        // Variables para la lógica de agarre
+        let grabbedObject = null;
 
-<a-entity id="hand1" geometry="primitive: sphere; radius:0.12" material="color:red"></a-entity>
-<a-entity id="hand2" geometry="primitive: sphere; radius:0.12" material="color:blue"></a-entity>
+        init();
+        animate();
 
-</a-scene>
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
 
-<script>
-const video=document.getElementById("video");
-const scene=document.querySelector("a-scene");
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 10);
+            camera.position.set(0, 1.6, 0.5);
 
-let hand1=document.getElementById("hand1");
-let hand2=document.getElementById("hand2");
+            // --- ILUMINACIÓN DETALLADA ---
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
 
-let score=0;
-let timeLeft=60;
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+            directionalLight.position.set(1, 2, 1);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
 
-//////////////////////
-// UI
-//////////////////////
+            // --- RENDERER PRO ---
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            document.body.appendChild(VRButton.createButton(renderer));
 
-let scoreText=document.getElementById("score");
-let timeText=document.getElementById("time");
+            // --- OBJETO INTERACTIVO (Detalle PBR) ---
+            const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0x0088ff, 
+                metalness: 0.7, 
+                roughness: 0.2,
+                emissive: 0x001133
+            });
+            cube = new THREE.Mesh(geometry, material);
+            cube.position.set(0, 1.2, -0.4);
+            cube.castShadow = true;
+            scene.add(cube);
 
-setInterval(()=>{
-timeLeft--;
-timeText.innerText=timeLeft;
-if(timeLeft<=0){
-alert("Game Over. Score: "+score);
-location.reload();
-}
-},1000);
+            // --- CONFIGURACIÓN DE MANOS ---
+            for (let i = 0; i < 2; i++) {
+                const hand = renderer.xr.getHand(i);
+                hand.add(handModelFactory.createHandModel(hand, "mesh"));
+                
+                // Eventos de pellizco (Pinch)
+                hand.addEventListener('pinchend', () => { grabbedObject = null; });
+                
+                scene.add(hand);
+                hands.push({ hand, inputSource: null });
+            }
 
-//////////////////////
-// TARGETS
-//////////////////////
+            window.addEventListener('resize', onWindowResize);
+        }
 
-function spawnTarget(){
-let obj=document.createElement("a-sphere");
+        function checkInteractions() {
+            // Recorremos ambas manos para detectar el pellizco
+            const session = renderer.xr.getSession();
+            if (!session) return;
 
-obj.setAttribute("radius",0.2);
-obj.setAttribute("color","yellow");
+            for (const handObj of hands) {
+                const hand = handObj.hand;
+                
+                // El "index-finger-tip" es el punto 9 en el estándar WebXR
+                const indexTip = hand.joints['index-finger-tip'];
+                const thumbTip = hand.joints['thumb-tip'];
 
-obj.setAttribute("position",{
-x:Math.random()*4-2,
-y:Math.random()*2,
-z:-3 - Math.random()*2
-});
+                if (indexTip && thumbTip) {
+                    const distance = indexTip.position.distanceTo(thumbTip.position);
 
-scene.appendChild(obj);
-}
+                    // Si la distancia es muy corta (pellizco)
+                    if (distance < 0.02) {
+                        const distToCube = indexTip.position.distanceTo(cube.position);
+                        
+                        // Si la mano está cerca del cubo, lo "agarramos"
+                        if (distToCube < 0.15) {
+                            cube.position.copy(indexTip.position);
+                            cube.material.emissive.setHex(0x00ff00); // Brillo verde al tocar
+                        }
+                    } else {
+                        cube.material.emissive.setHex(0x001133);
+                    }
+                }
+            }
+        }
 
-for(let i=0;i<6;i++){
-spawnTarget();
-}
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
 
-//////////////////////
-// HAND CLOSED
-//////////////////////
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
 
-function isClosedHand(lm){
-let tip=lm[8];
-let base=lm[5];
-return tip.y > base.y;
-}
-
-//////////////////////
-// HAND TRACKING
-//////////////////////
-
-const hands=new Hands({
-locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-
-hands.setOptions({
-maxNumHands:2,
-modelComplexity:1,
-minDetectionConfidence:0.7,
-minTrackingConfidence:0.7
-});
-
-hands.onResults(results=>{
-
-let handsData=results.multiHandLandmarks;
-if(!handsData) return;
-
-handsData.forEach((lm,index)=>{
-
-let tip=lm[8];
-let palm=lm[0];
-
-let x=(tip.x-0.5)*4;
-let y=(0.5-tip.y)*3;
-let depth=-2.5 + (palm.z*2);
-
-let hand=index===0 ? hand1 : hand2;
-
-hand.setAttribute("position",`${x} ${y} ${depth}`);
-
-let scale=0.12 + Math.abs(palm.z)*0.4;
-hand.setAttribute("scale",`${scale} ${scale} ${scale}`);
-
-let closed=isClosedHand(lm);
-
-//////////////////////
-// HIT DETECTION
-//////////////////////
-
-document.querySelectorAll("a-sphere").forEach(obj=>{
-let pos=obj.getAttribute("position");
-
-let dx=x-pos.x;
-let dy=y-pos.y;
-let dz=depth-pos.z;
-
-let dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
-
-if(dist<0.5){
-
-if(closed){
-
-// destruir target
-obj.remove();
-
-// score
-score++;
-scoreText.innerText=score;
-
-// respawn nuevo
-setTimeout(spawnTarget,500);
-}
-}
-});
-
-});
-
-});
-
-//////////////////////
-// CAMERA
-//////////////////////
-
-const camera=new Camera(video,{
-onFrame:async()=>{
-await hands.send({image:video});
-},
-width:640,
-height:480
-});
-
-camera.start();
-</script>
-
+        function render() {
+            checkInteractions();
+            renderer.render(scene, camera);
+        }
+    </script>
 </body>
 </html>
