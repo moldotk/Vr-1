@@ -3,18 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mixed Reality Fusion</title>
+    <title>Visor VR Passthrough Fusion</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
-        #start-btn {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            padding: 20px 40px; border: 2px solid #00ff88; background: rgba(0,0,0,0.8);
-            color: #00ff88; font-weight: bold; border-radius: 50px; cursor: pointer; z-index: 100;
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.7); z-index: 100;
+        }
+        button {
+            padding: 20px 40px; font-size: 1.2rem; border-radius: 10px;
+            border: none; background: #00ff88; color: black; font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <button id="start-btn">INICIAR FUSIÓN XR</button>
+    <div id="overlay">
+        <button id="btn-start">INICIAR MODO VISOR (SBS)</button>
+    </div>
 
     <script type="importmap">
         {
@@ -29,106 +35,100 @@
         import * as THREE from 'three';
         import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-        let scene, camera, renderer, crystal;
+        let scene, camera, renderer, object;
         let hand1, hand2;
 
         init();
 
         function init() {
             scene = new THREE.Scene();
+
+            // Cámara inicial
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            // CONFIGURACIÓN CLAVE PARA VISOR
             renderer.xr.enabled = true;
+            // Forzamos que la salida sea estéreo si el dispositivo lo permite
+            renderer.xr.cameraAutoUpdate = true; 
+
             document.body.appendChild(renderer.domElement);
 
-            // --- AMBIENTE FUSIONADO (Luz de VR en el mundo real) ---
-            const light = new THREE.PointLight(0x00ff88, 5, 10);
-            light.position.set(0, 2, 0);
+            // Iluminación Neon
+            const light = new THREE.PointLight(0x00ff88, 10);
+            light.position.set(0, 2, 1);
             scene.add(light);
-            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
-            // --- OBJETO DE ALTO DETALLE ---
-            const geometry = new THREE.OctahedronGeometry(0.1, 0);
-            const material = new THREE.MeshStandardMaterial({ 
+            // Objeto Detallado
+            const geo = new THREE.IcosahedronGeometry(0.1, 1);
+            const mat = new THREE.MeshStandardMaterial({ 
                 color: 0x00ff88, 
-                metalness: 1, 
-                roughness: 0,
-                transparent: true,
-                opacity: 0.8,
-                emissive: 0x00ff88,
-                emissiveIntensity: 0.5
+                metalness: 0.9, 
+                roughness: 0.1,
+                wireframe: true 
             });
-            crystal = new THREE.Mesh(geometry, material);
-            crystal.position.set(0, 1.2, -0.4);
-            scene.add(crystal);
+            object = new THREE.Mesh(geo, mat);
+            object.position.set(0, 1.4, -0.5);
+            scene.add(object);
 
-            // --- SISTEMA DE PARTÍCULAS (Elemento VR flotando en AR) ---
-            const partGeo = new THREE.BufferGeometry();
-            const posArr = new Float32Array(300);
-            for(let i=0; i<300; i++) posArr[i] = (Math.random() - 0.5) * 2;
-            partGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-            const partMat = new THREE.PointsMaterial({ color: 0x00ff88, size: 0.005 });
-            const particles = new THREE.Points(partGeo, partMat);
-            scene.add(particles);
-
-            // --- CONFIGURACIÓN DE MANOS CON OCLUSIÓN ---
             setupHands();
 
-            // --- BOTÓN DE INICIO ---
-            const btn = document.getElementById('start-btn');
-            btn.onclick = async () => {
-                const session = await navigator.xr.requestSession('immersive-ar', {
+            const btn = document.getElementById('btn-start');
+            btn.onclick = () => {
+                // Solicitamos sesión VR pero con 'local-floor' para mantener estabilidad
+                // En Android, esto activará la pantalla dividida si el navegador detecta un visor
+                navigator.xr.requestSession('immersive-vr', {
                     optionalFeatures: ['hand-tracking', 'local-floor']
-                });
-                renderer.xr.setSession(session);
-                btn.style.display = 'none';
+                }).then(onSessionStarted);
             };
-
-            renderer.setAnimationLoop(render);
         }
 
         function setupHands() {
-            const handFactory = new XRHandModelFactory();
+            const factory = new XRHandModelFactory();
             [0, 1].forEach(i => {
                 const hand = renderer.xr.getHand(i);
-                const model = handFactory.createHandModel(hand, "mesh");
-                hand.add(model);
+                hand.add(factory.createHandModel(hand, "mesh"));
                 
-                // Efecto de Oclusión: La mano oculta lo virtual pero deja ver la cámara
-                model.addEventListener('connected', (e) => {
-                    e.target.traverse(c => {
-                        if (c.isMesh) {
-                            c.material = new THREE.MeshBasicMaterial({ colorWrite: false });
-                        }
-                    });
+                // Material invisible para oclusión
+                hand.traverse(c => {
+                    if (c.isMesh) c.material = new THREE.MeshBasicMaterial({ colorWrite: false });
                 });
+                
                 scene.add(hand);
                 if(i === 0) hand1 = hand; else hand2 = hand;
             });
         }
 
-        function render(time) {
-            crystal.rotation.y = time / 1000;
-            crystal.position.y = 1.2 + Math.sin(time / 500) * 0.05;
+        function onSessionStarted(session) {
+            renderer.xr.setSession(session);
+            document.getElementById('overlay').style.display = 'none';
+            
+            // Si el modo VR tapa la cámara, forzamos transparencia (depende del firmware del Oppo)
+            scene.background = null; 
+        }
 
-            // Detección de pellizco para mover el cristal
+        function render(time) {
+            object.rotation.y = time / 1000;
+            
+            // Lógica de agarre para manos en estéreo
             [hand1, hand2].forEach(h => {
                 if(h && h.joints && h.joints['index-finger-tip']) {
-                    const index = h.joints['index-finger-tip'];
-                    const thumb = h.joints['thumb-tip'];
-                    if(index.position.distanceTo(thumb.position) < 0.02) {
-                        if(index.position.distanceTo(crystal.position) < 0.1) {
-                            crystal.position.copy(index.position);
-                        }
+                    const tip = h.joints['index-finger-tip'].position;
+                    const thumb = h.joints['thumb-tip'].position;
+                    if(tip.distanceTo(thumb) < 0.025 && tip.distanceTo(object.position) < 0.15) {
+                        object.position.copy(tip);
                     }
                 }
             });
 
             renderer.render(scene, camera);
         }
+
+        renderer.setAnimationLoop(render);
     </script>
 </body>
 </html>
