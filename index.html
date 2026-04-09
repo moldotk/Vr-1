@@ -2,20 +2,23 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Reparación XR: Cámara + VR</title>
+    <title>VR Walk & Hands - Pro Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
-        #gui { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; text-align: center; }
-        button { padding: 20px; font-size: 1.2rem; background: #00ff88; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        video { display: none; } /* Ocultamos el video crudo */
+        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; 
+                   flex-direction: column; justify-content: center; align-items: center; 
+                   background: rgba(0,0,0,0.85); z-index: 10; color: white; text-align: center; }
+        button { padding: 20px 40px; font-size: 1.5rem; background: #0088ff; color: white; 
+                 border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
+        p { margin-top: 20px; color: #aaa; }
     </style>
 </head>
 <body>
-    <div id="gui">
-        <button id="start">REPARAR Y ACTIVAR VISOR</button>
+    <div id="overlay">
+        <h1>MODO CAMINATA VR</h1>
+        <button id="start-vr">INICIAR JUEGO</button>
+        <p>Asegúrate de tener espacio despejado para caminar.</p>
     </div>
-    <video id="video" autoplay playsinline></video>
 
     <script type="importmap">
         {
@@ -30,20 +33,17 @@
         import * as THREE from 'three';
         import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-        let scene, camera, renderer, crystal;
-        const video = document.getElementById('video');
+        let scene, camera, renderer;
+        let hand1, hand2;
 
-        async function setupCamera() {
-            // Pedimos permiso para usar la cámara trasera
-            const constraints = { video: { facingMode: 'environment' } };
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = stream;
-            return new Promise(resolve => video.onloadedmetadata = resolve);
-        }
+        init();
 
         function init() {
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            scene.background = new THREE.Color(0x0a0a10);
+            scene.fog = new THREE.Fog(0x0a0a10, 2, 10); // Niebla para dar profundidad
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -51,63 +51,70 @@
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // 1. FONDO DE CÁMARA (Para que no se vea negro)
-            const videoTexture = new THREE.VideoTexture(video);
-            const backgroundGeo = new THREE.SphereGeometry(10, 32, 32);
-            const backgroundMat = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.BackSide });
-            const backgroundMesh = new THREE.Mesh(backgroundGeo, backgroundMat);
-            scene.add(backgroundMesh);
+            // --- LUCES DETALLADAS ---
+            const ambient = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0x0088ff, 3);
+            sun.position.set(5, 10, 5);
+            scene.add(sun);
 
-            // 2. LUZ Y CRISTAL DETALLADO (No más palitos)
-            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const pointLight = new THREE.PointLight(0x00ff88, 2);
-            pointLight.position.set(0, 2, 1);
-            scene.add(pointLight);
+            // --- ESCENARIO PARA CAMINAR (Suelo y Columnas) ---
+            // Suelo con rejilla para notar el movimiento
+            const grid = new THREE.GridHelper(20, 40, 0x0088ff, 0x222222);
+            scene.add(grid);
 
-            const geo = new THREE.IcosahedronGeometry(0.12, 0); // Sólido
-            const mat = new THREE.MeshStandardMaterial({ 
-                color: 0x00ff88, 
-                metalness: 0.9, 
-                roughness: 0.1,
-                emissive: 0x004422
-            });
-            crystal = new THREE.Mesh(geo, mat);
-            crystal.position.set(0, 1.4, -0.6);
-            scene.add(crystal);
-
-            // 3. MANOS
-            const factory = new XRHandModelFactory();
-            for(let i=0; i<2; i++) {
-                const hand = renderer.xr.getHand(i);
-                hand.add(factory.createHandModel(hand, "mesh"));
-                // Las manos ocultan el cristal si pasan por delante
-                hand.traverse(c => { if(c.isMesh) c.material = new THREE.MeshBasicMaterial({colorWrite:false}); });
-                scene.add(hand);
+            // Columnas sólidas (No palitos)
+            const colGeo = new THREE.BoxGeometry(0.3, 2, 0.3);
+            const colMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.2 });
+            
+            for(let i = 0; i < 10; i++) {
+                const col = new THREE.Mesh(colGeo, colMat);
+                col.position.set(Math.random() * 8 - 4, 1, Math.random() * 8 - 4);
+                scene.add(col);
             }
 
-            renderer.setAnimationLoop(() => {
-                crystal.rotation.y += 0.01;
-                crystal.rotation.x += 0.005;
-                renderer.render(scene, camera);
-            });
+            // --- OBJETO INTERACTIVO (Gema) ---
+            const gemaGeo = new THREE.OctahedronGeometry(0.15, 0);
+            const gemaMat = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.5 });
+            const gema = new THREE.Mesh(gemaGeo, gemaMat);
+            gema.position.set(0, 1.5, -1);
+            scene.add(gema);
+
+            // --- MANOS ---
+            const factory = new XRHandModelFactory();
+            hand1 = renderer.xr.getHand(0);
+            hand1.add(factory.createHandModel(hand1, "mesh"));
+            scene.add(hand1);
+
+            hand2 = renderer.xr.getHand(1);
+            hand2.add(factory.createHandModel(hand2, "mesh"));
+            scene.add(hand2);
+
+            // --- BOTÓN E INICIO DE SESIÓN ---
+            document.getElementById('start-vr').onclick = () => {
+                navigator.xr.requestSession('immersive-vr', {
+                    requiredFeatures: ['local-floor'], // ESTO HABILITA EL CAMINAR
+                    optionalFeatures: ['hand-tracking']
+                }).then(session => {
+                    renderer.xr.setSession(session);
+                    document.getElementById('overlay').style.display = 'none';
+                });
+            };
+
+            renderer.setAnimationLoop(render);
         }
 
-        document.getElementById('start').onclick = async () => {
-            try {
-                await setupCamera(); // Paso 1: Encender cámara del Oppo
-                init(); // Paso 2: Crear mundo 3D
-                
-                // Paso 3: Entrar en modo Visor Pantalla Dividida
-                const session = await navigator.xr.requestSession('immersive-vr', {
-                    optionalFeatures: ['hand-tracking', 'local-floor']
-                });
-                renderer.xr.setSession(session);
-                document.getElementById('gui').style.display = 'none';
-            } catch (e) {
-                alert("Error: Asegúrate de usar HTTPS y dar permisos de cámara.");
-                console.error(e);
-            }
-        };
+        function render(time) {
+            // Animación suave del cristal
+            scene.traverse(child => {
+                if(child.isMesh && child.geometry.type === "OctahedronGeometry") {
+                    child.rotation.y += 0.01;
+                    child.position.y = 1.5 + Math.sin(time / 1000) * 0.1;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
     </script>
 </body>
 </html>
