@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ultimate XR Fusion - Oppo A79</title>
+    <title>XR Fusion: Visión Natural SBS</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center;
-            align-items: center; background: rgba(0,0,0,0.9); z-index: 100;
+            align-items: center; background: rgba(0,0,0,0.95); z-index: 100;
             color: white; text-align: center; padding: 20px;
         }
         button {
@@ -23,8 +23,8 @@
 <body>
     <div id="overlay">
         <h1>REDACTOR XR FUSION</h1>
-        <p>1. Acepta permisos de cámara.<br>2. Pon el móvil en el visor.<br>3. Camina para moverte.</p>
-        <button id="btn-start">INICIAR EXPERIENCIA</button>
+        <p>Acepta permisos y coloca el móvil en el visor.</p>
+        <button id="btn-start">INICIAR (VISIÓN NATURAL)</button>
     </div>
     
     <video id="video-feed" autoplay playsinline></video>
@@ -42,13 +42,12 @@
         import * as THREE from 'three';
         import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 
-        let scene, camera, renderer, crystal;
+        let scene, camera, renderer, crystal, videoPlane;
         const video = document.getElementById('video-feed');
 
         async function init() {
-            // --- CONFIGURACIÓN DE ESCENA ---
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 50);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 100);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -56,22 +55,24 @@
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // --- FONDO: TEXTURA DE CÁMARA PARA EVITAR PANTALLA NEGRA ---
+            // --- FONDO: PLANO RECTIFICADO (Soluciona el efecto "rarísimo") ---
             const texture = new THREE.VideoTexture(video);
-            const skyGeo = new THREE.SphereGeometry(15, 32, 32);
-            const skyMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
-            const sky = new THREE.Mesh(skyGeo, skyMat);
-            scene.add(sky);
+            
+            // Usamos un plano gigante en lugar de una esfera
+            // 20x20 metros a 10 metros de distancia
+            const planeGeo = new THREE.PlaneGeometry(20, 20); 
+            const planeMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+            videoPlane = new THREE.Mesh(planeGeo, planeMat);
+            videoPlane.position.set(0, 0, -10); // Lo movemos lejos detrás de la escena
+            scene.add(videoPlane);
 
             // --- ILUMINACIÓN ---
-            const ambient = new THREE.AmbientLight(0xffffff, 1);
-            scene.add(ambient);
+            scene.add(new THREE.AmbientLight(0xffffff, 1));
             const pointLight = new THREE.PointLight(0x00ff88, 15);
             pointLight.position.set(0, 3, 2);
             scene.add(pointLight);
 
             // --- ELEMENTOS DE REFERENCIA PARA CAMINAR ---
-            // Suelo (Grid) para notar el avance
             const grid = new THREE.GridHelper(50, 100, 0x00ff88, 0x222222);
             grid.position.y = -0.01;
             scene.add(grid);
@@ -88,11 +89,8 @@
             // --- CRISTAL INTERACTIVO ---
             const gemaGeo = new THREE.OctahedronGeometry(0.15, 0);
             const gemaMat = new THREE.MeshStandardMaterial({ 
-                color: 0x00ff88, 
-                metalness: 1, 
-                roughness: 0, 
-                emissive: 0x00ff88, 
-                emissiveIntensity: 0.5 
+                color: 0x00ff88, metalness: 1, roughness: 0, 
+                emissive: 0x00ff88, emissiveIntensity: 0.5 
             });
             crystal = new THREE.Mesh(gemaGeo, gemaMat);
             crystal.position.set(0, 1.5, -1);
@@ -103,7 +101,6 @@
             for(let i=0; i<2; i++) {
                 const hand = renderer.xr.getHand(i);
                 hand.add(handFactory.createHandModel(hand, "mesh"));
-                // Las manos ocultan lo virtual
                 hand.traverse(c => { if(c.isMesh) c.material = new THREE.MeshBasicMaterial({colorWrite: false}); });
                 scene.add(hand);
             }
@@ -113,6 +110,17 @@
 
         function render(time) {
             crystal.rotation.y = time / 1000;
+            
+            // TRUCO FINAL: El plano de video debe seguir a la cámara pero NO su rotación
+            // para mantener el Passthrough estable mientras caminas.
+            if(renderer.xr.isPresenting) {
+                const xrCamera = renderer.xr.getCamera(camera);
+                // Obtenemos la posición de la cámara XR (ojo izquierdo)
+                const pos = xrCamera.cameras[0].position; 
+                // Mantenemos el plano a 10 metros detrás de la cabeza pero centrado
+                videoPlane.position.set(pos.x, pos.y, pos.z - 10);
+            }
+
             renderer.render(scene, camera);
         }
 
