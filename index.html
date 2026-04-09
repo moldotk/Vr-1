@@ -4,30 +4,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
 <style>
+body { margin:0; overflow:hidden; }
+
+#ui{
+position:fixed;
+top:10px;
+left:10px;
+color:white;
+font-family:Arial;
+background:rgba(0,0,0,0.5);
+padding:10px;
+border-radius:10px;
+z-index:10;
+}
 video{
-  position:fixed;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  z-index:-1;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+object-fit:cover;
+z-index:-1;
 }
 </style>
 </head>
 
 <body>
 
+<div id="ui">
+Score: <span id="score">0</span><br>
+Time: <span id="time">60</span>
+</div>
+
 <video id="video" autoplay playsinline></video>
 
 <a-scene embedded>
 
-<!-- manos -->
 <a-entity id="hand1" geometry="primitive: sphere; radius:0.12" material="color:red"></a-entity>
 <a-entity id="hand2" geometry="primitive: sphere; radius:0.12" material="color:blue"></a-entity>
 
@@ -40,28 +56,56 @@ const scene=document.querySelector("a-scene");
 let hand1=document.getElementById("hand1");
 let hand2=document.getElementById("hand2");
 
-let grabbedObj=null;
-let lastPos=null;
+let score=0;
+let timeLeft=60;
 
 //////////////////////
-// OBJETOS
+// UI
 //////////////////////
 
-for(let i=0;i<8;i++){
-let obj=document.createElement("a-box");
-obj.setAttribute("position",`${Math.random()*4-2} ${Math.random()*2} -3`);
-obj.setAttribute("color","#00e5ff");
+let scoreText=document.getElementById("score");
+let timeText=document.getElementById("time");
+
+setInterval(()=>{
+timeLeft--;
+timeText.innerText=timeLeft;
+if(timeLeft<=0){
+alert("Game Over. Score: "+score);
+location.reload();
+}
+},1000);
+
+//////////////////////
+// TARGETS
+//////////////////////
+
+function spawnTarget(){
+let obj=document.createElement("a-sphere");
+
+obj.setAttribute("radius",0.2);
+obj.setAttribute("color","yellow");
+
+obj.setAttribute("position",{
+x:Math.random()*4-2,
+y:Math.random()*2,
+z:-3 - Math.random()*2
+});
+
 scene.appendChild(obj);
 }
 
+for(let i=0;i<6;i++){
+spawnTarget();
+}
+
 //////////////////////
-// DETECTAR PUÑO
+// HAND CLOSED
 //////////////////////
 
 function isClosedHand(lm){
 let tip=lm[8];
 let base=lm[5];
-return (tip.y > base.y); // dedo doblado
+return tip.y > base.y;
 }
 
 //////////////////////
@@ -82,87 +126,62 @@ minTrackingConfidence:0.7
 hands.onResults(results=>{
 
 let handsData=results.multiHandLandmarks;
-
 if(!handsData) return;
 
 handsData.forEach((lm,index)=>{
 
 let tip=lm[8];
+let palm=lm[0];
 
 let x=(tip.x-0.5)*4;
 let y=(0.5-tip.y)*3;
+let depth=-2.5 + (palm.z*2);
 
-let hand=index===0?hand1:hand2;
-hand.setAttribute("position",`${x} ${y} -2`);
+let hand=index===0 ? hand1 : hand2;
+
+hand.setAttribute("position",`${x} ${y} ${depth}`);
+
+let scale=0.12 + Math.abs(palm.z)*0.4;
+hand.setAttribute("scale",`${scale} ${scale} ${scale}`);
 
 let closed=isClosedHand(lm);
 
 //////////////////////
-// AGARRAR
+// HIT DETECTION
 //////////////////////
 
-if(closed){
-
-if(!grabbedObj){
-
-document.querySelectorAll("a-box").forEach(obj=>{
+document.querySelectorAll("a-sphere").forEach(obj=>{
 let pos=obj.getAttribute("position");
+
 let dx=x-pos.x;
 let dy=y-pos.y;
-let dz=(-2)-pos.z;
+let dz=depth-pos.z;
+
 let dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
 
 if(dist<0.5){
-grabbedObj=obj;
+
+if(closed){
+
+// destruir target
+obj.remove();
+
+// score
+score++;
+scoreText.innerText=score;
+
+// respawn nuevo
+setTimeout(spawnTarget,500);
+}
 }
 });
-
-}
-
-if(grabbedObj){
-grabbedObj.setAttribute("position",`${x} ${y} -2`);
-
-if(lastPos){
-let vx=x-lastPos.x;
-let vy=y-lastPos.y;
-
-// guardar velocidad
-grabbedObj.userData={vx,vy};
-}
-
-lastPos={x,y};
-}
-
-}else{
-
-//////////////////////
-// SOLTAR / LANZAR
-//////////////////////
-
-if(grabbedObj){
-
-let data=grabbedObj.userData||{vx:0,vy:0};
-
-let pos=grabbedObj.getAttribute("position");
-
-grabbedObj.setAttribute("animation__move",{
-property:"position",
-to:`${pos.x+data.vx*10} ${pos.y+data.vy*10} -5`,
-dur:500
-});
-
-grabbedObj=null;
-lastPos=null;
-}
-
-}
 
 });
 
 });
 
 //////////////////////
-// CAMARA
+// CAMERA
 //////////////////////
 
 const camera=new Camera(video,{
