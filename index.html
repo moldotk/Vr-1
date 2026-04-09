@@ -2,208 +2,178 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
 <style>
-#startBtn{
-  position:fixed; top:40%; left:50%;
-  transform:translate(-50%,-50%);
-  padding:20px; font-size:18px; z-index:999;
-}
-#hud{
-  position:fixed; top:10px; left:10px;
-  color:white; font-size:18px; z-index:999;
+video{
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  z-index:-1;
 }
 </style>
 </head>
 
 <body>
 
-<div id="hud">Objetos: 0 / 5</div>
-<button id="startBtn">EXPLORAR</button>
+<video id="video" autoplay playsinline></video>
 
-<a-scene id="scene"
- fog="type: exponential; color: #cfd8dc; density: 0.015">
+<a-scene embedded>
 
-<!-- PLAYER -->
-<a-entity id="player" position="0 1.7 0">
-  <a-camera id="cam" look-controls="touchEnabled:true"></a-camera>
-</a-entity>
-
-<!-- TERRENO CON TEXTURA -->
-<a-plane rotation="-90 0 0" width="600" height="600"
- material="src: https://cdn.aframe.io/a-painter/images/floor.jpg; repeat: 50 50">
-</a-plane>
-
-<a-sky color="#78909c"></a-sky>
-
-<a-light type="ambient" intensity="0.6"></a-light>
-<a-light type="directional" intensity="0.8" position="5 10 5"></a-light>
+<!-- manos -->
+<a-entity id="hand1" geometry="primitive: sphere; radius:0.12" material="color:red"></a-entity>
+<a-entity id="hand2" geometry="primitive: sphere; radius:0.12" material="color:blue"></a-entity>
 
 </a-scene>
 
 <script>
-let scene=document.querySelector("#scene");
-let player=document.querySelector("#player");
-let cam=document.querySelector("#cam");
+const video=document.getElementById("video");
+const scene=document.querySelector("a-scene");
 
-let started=false;
-let moving=false;
-let items=0;
+let hand1=document.getElementById("hand1");
+let hand2=document.getElementById("hand2");
 
-//////////////////////
-// START
-//////////////////////
-
-document.getElementById("startBtn").onclick=()=>{
-  document.getElementById("startBtn").style.display="none";
-  generarMapa();
-  started=true;
-  gameLoop();
-};
+let grabbedObj=null;
+let lastPos=null;
 
 //////////////////////
-// MAPA PRO
+// OBJETOS
 //////////////////////
 
-function generarMapa(){
-
-// 🌲 BOSQUE NATURAL
-for(let i=0;i<250;i++){
-  let x=(Math.random()-0.5)*550;
-  let z=(Math.random()-0.5)*550;
-
-  if(Math.hypot(x,z)<20) continue;
-
-  let h=3+Math.random()*5;
-
-  let tronco=document.createElement("a-cylinder");
-  tronco.setAttribute("position",`${x} ${h/2} ${z}`);
-  tronco.setAttribute("height",h);
-  tronco.setAttribute("radius",0.25+Math.random()*0.2);
-  tronco.setAttribute("color","#5a3e2b");
-
-  let hojas=document.createElement("a-sphere");
-  hojas.setAttribute("position",`${x} ${h+1.5} ${z}`);
-  hojas.setAttribute("radius",1.5+Math.random()*1.5);
-  hojas.setAttribute("color","#2e7d32");
-
-  scene.appendChild(tronco);
-  scene.appendChild(hojas);
-}
-
-// 🛣️ CAMINO
-for(let i=0;i<50;i++){
-  let path=document.createElement("a-plane");
-path.setAttribute("rotation","-90 0 0");
-path.setAttribute("width","4");
-path.setAttribute("height","4");
-path.setAttribute("material","src: https://cdn.aframe.io/a-painter/images/floor.jpg; repeat: 2 2");
-path.setAttribute("position",`${i*4-100} 0.02 0`);
-scene.appendChild(path);
-}
-
-// 🏚️ CASA DETALLADA
-function crearCasa(x,z){
-
-let base=document.createElement("a-box");
-base.setAttribute("position",`${x} 1.5 ${z}`);
-base.setAttribute("width","5");
-base.setAttribute("height","3");
-base.setAttribute("depth","5");
-base.setAttribute("color","#4e342e");
-
-let techo=document.createElement("a-cone");
-techo.setAttribute("position",`${x} 4 ${z}`);
-techo.setAttribute("radius-bottom","3.5");
-techo.setAttribute("height","2");
-techo.setAttribute("color","#5d4037");
-
-let puerta=document.createElement("a-box");
-puerta.setAttribute("position",`${x} 1 ${z+2.6}`);
-puerta.setAttribute("width","1");
-puerta.setAttribute("height","2");
-puerta.setAttribute("depth","0.1");
-puerta.setAttribute("color","#3e2723");
-
-let ventana=document.createElement("a-box");
-ventana.setAttribute("position",`${x+1.5} 2 ${z+2.6}`);
-ventana.setAttribute("width","1");
-ventana.setAttribute("height","1");
-ventana.setAttribute("depth","0.1");
-ventana.setAttribute("color","#90caf9");
-
-scene.appendChild(base);
-scene.appendChild(techo);
-scene.appendChild(puerta);
-scene.appendChild(ventana);
-
-// props
-let barril=document.createElement("a-cylinder");
-barril.setAttribute("position",`${x+2} 0.8 ${z}`);
-barril.setAttribute("height","1.5");
-barril.setAttribute("radius","0.5");
-barril.setAttribute("color","#795548");
-
-scene.appendChild(barril);
-}
-
-// crear varias casas
-for(let i=0;i<6;i++){
-  let x=(Math.random()-0.5)*400;
-  let z=(Math.random()-0.5)*400;
-  crearCasa(x,z);
-}
-
-// 🎒 OBJETOS INTEGRADOS
-for(let i=0;i<5;i++){
-  let x=(Math.random()-0.5)*400;
-  let z=(Math.random()-0.5)*400;
-
-  let item=document.createElement("a-box");
-  item.setAttribute("position",`${x} 0.5 ${z}`);
-  item.setAttribute("width","0.5");
-  item.setAttribute("height","0.5");
-  item.setAttribute("depth","0.5");
-  item.setAttribute("color","#ffd600");
-
-  item.addEventListener("click",()=>{
-    item.remove();
-    items++;
-    document.getElementById("hud").innerText="Objetos: "+items+" / 5";
-
-    if(items>=5){
-      alert("GANASTE 🎉");
-      location.reload();
-    }
-  });
-
-  scene.appendChild(item);
-}
-
+for(let i=0;i<8;i++){
+let obj=document.createElement("a-box");
+obj.setAttribute("position",`${Math.random()*4-2} ${Math.random()*2} -3`);
+obj.setAttribute("color","#00e5ff");
+scene.appendChild(obj);
 }
 
 //////////////////////
-// MOVIMIENTO
+// DETECTAR PUÑO
 //////////////////////
 
-document.body.addEventListener("touchstart",()=>moving=true);
-document.body.addEventListener("touchend",()=>moving=false);
-
-function gameLoop(){
-  if(started && moving){
-    let p=player.getAttribute("position");
-    let dir=new THREE.Vector3();
-    cam.object3D.getWorldDirection(dir);
-    dir.negate();
-
-    p.x+=dir.x*0.18;
-    p.z+=dir.z*0.18;
-
-    player.setAttribute("position",p);
-  }
-  requestAnimationFrame(gameLoop);
+function isClosedHand(lm){
+let tip=lm[8];
+let base=lm[5];
+return (tip.y > base.y); // dedo doblado
 }
+
+//////////////////////
+// HAND TRACKING
+//////////////////////
+
+const hands=new Hands({
+locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+maxNumHands:2,
+modelComplexity:1,
+minDetectionConfidence:0.7,
+minTrackingConfidence:0.7
+});
+
+hands.onResults(results=>{
+
+let handsData=results.multiHandLandmarks;
+
+if(!handsData) return;
+
+handsData.forEach((lm,index)=>{
+
+let tip=lm[8];
+
+let x=(tip.x-0.5)*4;
+let y=(0.5-tip.y)*3;
+
+let hand=index===0?hand1:hand2;
+hand.setAttribute("position",`${x} ${y} -2`);
+
+let closed=isClosedHand(lm);
+
+//////////////////////
+// AGARRAR
+//////////////////////
+
+if(closed){
+
+if(!grabbedObj){
+
+document.querySelectorAll("a-box").forEach(obj=>{
+let pos=obj.getAttribute("position");
+let dx=x-pos.x;
+let dy=y-pos.y;
+let dz=(-2)-pos.z;
+let dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+
+if(dist<0.5){
+grabbedObj=obj;
+}
+});
+
+}
+
+if(grabbedObj){
+grabbedObj.setAttribute("position",`${x} ${y} -2`);
+
+if(lastPos){
+let vx=x-lastPos.x;
+let vy=y-lastPos.y;
+
+// guardar velocidad
+grabbedObj.userData={vx,vy};
+}
+
+lastPos={x,y};
+}
+
+}else{
+
+//////////////////////
+// SOLTAR / LANZAR
+//////////////////////
+
+if(grabbedObj){
+
+let data=grabbedObj.userData||{vx:0,vy:0};
+
+let pos=grabbedObj.getAttribute("position");
+
+grabbedObj.setAttribute("animation__move",{
+property:"position",
+to:`${pos.x+data.vx*10} ${pos.y+data.vy*10} -5`,
+dur:500
+});
+
+grabbedObj=null;
+lastPos=null;
+}
+
+}
+
+});
+
+});
+
+//////////////////////
+// CAMARA
+//////////////////////
+
+const camera=new Camera(video,{
+onFrame:async()=>{
+await hands.send({image:video});
+},
+width:640,
+height:480
+});
+
+camera.start();
 </script>
 
 </body>
