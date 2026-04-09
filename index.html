@@ -3,184 +3,207 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+
 <style>
 #startBtn{
   position:fixed; top:40%; left:50%;
   transform:translate(-50%,-50%);
   padding:20px; font-size:18px; z-index:999;
 }
+#hud{
+  position:fixed; top:10px; left:10px;
+  color:white; font-size:18px; z-index:999;
+}
 </style>
 </head>
 
 <body>
 
-<button id="startBtn">INICIAR</button>
+<div id="hud">Objetos: 0 / 5</div>
+<button id="startBtn">EXPLORAR</button>
 
-<a-scene fog="type: exponential; color: #bcd3ff; density: 0.01">
+<a-scene id="scene"
+ fog="type: exponential; color: #cfd8dc; density: 0.015">
 
-  <a-assets>
-    <a-asset-item id="monsterModel"
-      src="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@main/2.0/Monster/glTF-Binary/Monster.glb">
-    </a-asset-item>
-  </a-assets>
+<!-- PLAYER -->
+<a-entity id="player" position="0 1.7 0">
+  <a-camera id="cam" look-controls="touchEnabled:true"></a-camera>
+</a-entity>
 
-  <!-- PLAYER -->
-  <a-entity id="player" position="0 1.7 0">
-    <a-camera id="cam" look-controls="touchEnabled:true">
-      <!-- linterna suave (de día casi no se nota) -->
-      <a-light type="spot" intensity="2" angle="40" distance="40"></a-light>
-    </a-camera>
-  </a-entity>
+<!-- TERRENO CON TEXTURA -->
+<a-plane rotation="-90 0 0" width="600" height="600"
+ material="src: https://cdn.aframe.io/a-painter/images/floor.jpg; repeat: 50 50">
+</a-plane>
 
-  <!-- SUELO -->
-  <a-plane rotation="-90 0 0" width="300" height="300" color="#4c7a3c"></a-plane>
+<a-sky color="#78909c"></a-sky>
 
-  <!-- CIELO (día) -->
-  <a-sky color="#87CEEB"></a-sky>
-
-  <!-- ☀️ LUZ DEL SOL -->
-  <a-light type="ambient" intensity="0.9"></a-light>
-  <a-light type="directional" intensity="0.8" position="2 10 3"></a-light>
-
-  <!-- 🌕 LUNA -->
-  <a-sphere position="20 30 -50" radius="5" color="#ddd"></a-sphere>
-
-  <!-- 👻 MONSTRUO -->
-  <a-entity id="monster"
-    gltf-model="#monsterModel"
-    scale="1 1 1"
-    position="0 0 -20">
-  </a-entity>
+<a-light type="ambient" intensity="0.6"></a-light>
+<a-light type="directional" intensity="0.8" position="5 10 5"></a-light>
 
 </a-scene>
 
 <script>
-let scene = document.querySelector("a-scene");
-let player = document.querySelector("#player");
-let cam = document.querySelector("#cam");
-let monster = document.querySelector("#monster");
+let scene=document.querySelector("#scene");
+let player=document.querySelector("#player");
+let cam=document.querySelector("#cam");
 
-let started = false;
-let moving = false;
+let started=false;
+let moving=false;
+let items=0;
 
-// ACTIVAR
-document.getElementById("startBtn").onclick = async () => {
+//////////////////////
+// START
+//////////////////////
+
+document.getElementById("startBtn").onclick=()=>{
   document.getElementById("startBtn").style.display="none";
-
-  if (typeof DeviceMotionEvent !== "undefined" &&
-      typeof DeviceMotionEvent.requestPermission === "function") {
-    try { await DeviceMotionEvent.requestPermission(); } catch(e){}
-  }
-
-  started = true;
+  generarMapa();
+  started=true;
+  gameLoop();
 };
 
-/////////////////////////
-// 🌲 BOSQUE + ARBUSTOS
-/////////////////////////
+//////////////////////
+// MAPA PRO
+//////////////////////
 
-for(let i=0;i<120;i++){
-  let x=(Math.random()-0.5)*250;
-  let z=(Math.random()-0.5)*250;
+function generarMapa(){
 
-  // árbol
+// 🌲 BOSQUE NATURAL
+for(let i=0;i<250;i++){
+  let x=(Math.random()-0.5)*550;
+  let z=(Math.random()-0.5)*550;
+
+  if(Math.hypot(x,z)<20) continue;
+
+  let h=3+Math.random()*5;
+
   let tronco=document.createElement("a-cylinder");
-  tronco.setAttribute("position",`${x} 1.5 ${z}`);
-  tronco.setAttribute("radius","0.3");
-  tronco.setAttribute("height","3");
-  tronco.setAttribute("color","#6b4f2a");
+  tronco.setAttribute("position",`${x} ${h/2} ${z}`);
+  tronco.setAttribute("height",h);
+  tronco.setAttribute("radius",0.25+Math.random()*0.2);
+  tronco.setAttribute("color","#5a3e2b");
 
   let hojas=document.createElement("a-sphere");
-  hojas.setAttribute("position",`${x} 3.5 ${z}`);
-  hojas.setAttribute("radius","1.5");
+  hojas.setAttribute("position",`${x} ${h+1.5} ${z}`);
+  hojas.setAttribute("radius",1.5+Math.random()*1.5);
   hojas.setAttribute("color","#2e7d32");
 
   scene.appendChild(tronco);
   scene.appendChild(hojas);
 }
 
-// 🌿 arbustos
-for(let i=0;i<200;i++){
-  let x=(Math.random()-0.5)*250;
-  let z=(Math.random()-0.5)*250;
-
-  let bush=document.createElement("a-sphere");
-  bush.setAttribute("position",`${x} 0.5 ${z}`);
-  bush.setAttribute("radius","0.5");
-  bush.setAttribute("color","#1b5e20");
-
-  scene.appendChild(bush);
+// 🛣️ CAMINO
+for(let i=0;i<50;i++){
+  let path=document.createElement("a-plane");
+  path.setAttribute("rotation","-90 0 0");
+  path.setAttribute("width","4");
+  path.setAttribute("height","4");
+  path.setAttribute("color","#8d6e63");
+  path.setAttribute("position",`${i*4-100} 0.02 0`);
+  scene.appendChild(path);
 }
 
-/////////////////////////
-// 🚶 MOVIMIENTO
-/////////////////////////
+// 🏚️ CASA DETALLADA
+function crearCasa(x,z){
 
-function move(){
-  if(!started || !moving) return;
+let base=document.createElement("a-box");
+base.setAttribute("position",`${x} 1.5 ${z}`);
+base.setAttribute("width","5");
+base.setAttribute("height","3");
+base.setAttribute("depth","5");
+base.setAttribute("color","#4e342e");
 
-  let pos=player.getAttribute("position");
-  let dir=new THREE.Vector3();
-  cam.object3D.getWorldDirection(dir);
+let techo=document.createElement("a-cone");
+techo.setAttribute("position",`${x} 4 ${z}`);
+techo.setAttribute("radius-bottom","3.5");
+techo.setAttribute("height","2");
+techo.setAttribute("color","#5d4037");
 
-  pos.x+=dir.x*0.25;
-  pos.z+=dir.z*0.25;
+let puerta=document.createElement("a-box");
+puerta.setAttribute("position",`${x} 1 ${z+2.6}`);
+puerta.setAttribute("width","1");
+puerta.setAttribute("height","2");
+puerta.setAttribute("depth","0.1");
+puerta.setAttribute("color","#3e2723");
 
-  player.setAttribute("position",pos);
-  requestAnimationFrame(move);
+let ventana=document.createElement("a-box");
+ventana.setAttribute("position",`${x+1.5} 2 ${z+2.6}`);
+ventana.setAttribute("width","1");
+ventana.setAttribute("height","1");
+ventana.setAttribute("depth","0.1");
+ventana.setAttribute("color","#90caf9");
+
+scene.appendChild(base);
+scene.appendChild(techo);
+scene.appendChild(puerta);
+scene.appendChild(ventana);
+
+// props
+let barril=document.createElement("a-cylinder");
+barril.setAttribute("position",`${x+2} 0.8 ${z}`);
+barril.setAttribute("height","1.5");
+barril.setAttribute("radius","0.5");
+barril.setAttribute("color","#795548");
+
+scene.appendChild(barril);
 }
 
-document.body.addEventListener("touchstart",()=>{
-  if(!started)return;
-  moving=true;
-  move();
-});
+// crear varias casas
+for(let i=0;i<6;i++){
+  let x=(Math.random()-0.5)*400;
+  let z=(Math.random()-0.5)*400;
+  crearCasa(x,z);
+}
 
-document.body.addEventListener("touchend",()=>{
-  moving=false;
-});
+// 🎒 OBJETOS INTEGRADOS
+for(let i=0;i<5;i++){
+  let x=(Math.random()-0.5)*400;
+  let z=(Math.random()-0.5)*400;
 
-/////////////////////////
-// 👁️ IA MONSTRUO
-/////////////////////////
+  let item=document.createElement("a-box");
+  item.setAttribute("position",`${x} 0.5 ${z}`);
+  item.setAttribute("width","0.5");
+  item.setAttribute("height","0.5");
+  item.setAttribute("depth","0.5");
+  item.setAttribute("color","#ffd600");
 
-setInterval(()=>{
-  let p=player.getAttribute("position");
-  let m=monster.getAttribute("position");
+  item.addEventListener("click",()=>{
+    item.remove();
+    items++;
+    document.getElementById("hud").innerText="Objetos: "+items+" / 5";
 
-  let dx=p.x-m.x;
-  let dz=p.z-m.z;
+    if(items>=5){
+      alert("GANASTE 🎉");
+      location.reload();
+    }
+  });
 
-  m.x+=dx*0.015;
-  m.z+=dz*0.015;
+  scene.appendChild(item);
+}
 
-  monster.setAttribute("position",m);
-},100);
+}
 
-// teleport ocasional
-setInterval(()=>{
-  let p=player.getAttribute("position");
+//////////////////////
+// MOVIMIENTO
+//////////////////////
 
-  if(Math.random()<0.3){
-    let x=p.x+(Math.random()-0.5)*10;
-    let z=p.z+(Math.random()-0.5)*10;
-    monster.setAttribute("position",`${x} 0 ${z}`);
+document.body.addEventListener("touchstart",()=>moving=true);
+document.body.addEventListener("touchend",()=>moving=false);
+
+function gameLoop(){
+  if(started && moving){
+    let p=player.getAttribute("position");
+    let dir=new THREE.Vector3();
+    cam.object3D.getWorldDirection(dir);
+    dir.negate();
+
+    p.x+=dir.x*0.18;
+    p.z+=dir.z*0.18;
+
+    player.setAttribute("position",p);
   }
-},6000);
-
-// game over
-setInterval(()=>{
-  let p=player.getAttribute("position");
-  let m=monster.getAttribute("position");
-
-  let dist=Math.hypot(p.x-m.x,p.z-m.z);
-
-  if(dist<1.5){
-    alert("💀 TE ATRAPÓ 💀");
-    location.reload();
-  }
-},400);
-
+  requestAnimationFrame(gameLoop);
+}
 </script>
 
 </body>
